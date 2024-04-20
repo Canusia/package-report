@@ -1,0 +1,58 @@
+{% load templatehelpers %}
+{% load crispy_forms_tags %}
+
+<div class="row">
+    <div class="col-12">
+        <div class="p-3">
+            <h3>{{title}}</h3>
+        </div>
+    </div>
+    <div class="col-6">
+        <div class="p-3">
+            {{form_html}}
+        </div>
+    </div>
+    <div class="col-6">
+        <div class="p-3">
+                    <ul class="nav nav-tabs">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-toggle="tab" href="#description">Description</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-toggle="tab" href="#recent">Recent Runs</a>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <div class="tab-pane active " id="description">
+
+                            <div class="card border-top-0">
+                                <div class="card-body">
+                                    {{description|safe}}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane" id="recent">
+                            
+                            <div class="card border-top-0">
+                                <div class="card-body">
+                                    <table id="report_runs" style="width: 100%;" class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Run On</th>
+                                                <th>Status</th>
+                                                <th>Report</th>
+                                            </tr>
+                                        </thead>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

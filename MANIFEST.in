@@ -1,0 +1,10 @@
+include LICENSE
+include README.rst
+recursive-include report/admin *
+recursive-include report/models *
+recursive-include report/urls *
+recursive-include report/views *
+recursive-include report/static *
+recursive-include report/templates *
+recursive-include report/management *
+recursive-include report/migrations *

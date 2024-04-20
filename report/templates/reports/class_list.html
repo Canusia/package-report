@@ -1,0 +1,60 @@
+<table class="table mb-0 pb-0">
+    <tr class="bg-dark text-white">
+        <td width='15%' class=""><u>{{class_section.course.cohort.designator}} {{class_section.course.catalog_number}}</u></td>
+        <td width='5%'><u>{{class_section.section_number.number}}</u></td>
+        <td width='10%'><u>{{class_section.class_number}}</u></td>
+        <td width='30%'><u>{{class_section.teacher.user.first_name}}</u></td>
+        <td width='20%'><u>{{class_section.days}}</u></td>
+        <td width='20%'><u>{{class_section.times}}</u></td>
+    </tr>
+</table>
+
+<table class="table ">
+    <thead class="thead-light">
+        <tr >
+            <th>Student Name</th>
+            <th>ID</th>
+            <th>GradDate</th>
+            <th>ALEKS</th>
+            <th>ACT</th>
+            <th>M</th>
+            <th>E</th>
+            <th>C</th>
+            <th>PP</th>
+            <th>Bal</th>
+            <th>Att Hrs</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if registrations %}
+            {%for registration in registrations%}
+                <tr >
+                    <td>{{registration.student.user.last_name}}, {% if registration.student.user.middle_name %}{{registration.student.user.middle_name}} {% endif %}{{registration.student.user.first_name}}</td>
+                    <td>{{registration.student.user.psid}}</td>
+                    <td>{{registration.student.graduation_date|date:'m/d/Y'}}</td>
+                    <td>{{registration.student.aleks}}</td>
+                    <td></td>
+                    <td>{{registration.student.math}}</td>
+                    <td>{{registration.student.english}}</td>
+                    <td>{{registration.student.composite}}</td>
+                    <td>
+                        {% if registration.has_signed_parent_permission %}
+                            Yes
+                        {%else%}
+                            No
+                        {%endif%}
+
+                    </td>
+                    <td>{{registration.student.tuition_owed}}</td>
+                    <td>{{registration.student.att_credits}}</td>
+                    
+                </tr>
+            {% endfor %}
+        {% else %}
+                <tr>
+                    <td colspan="12">No students found</td>
+                </tr>
+        {% endif %}
+    </tbody>
+</table>
+<div class="clearfix">&nbsp;</div>
