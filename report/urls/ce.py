@@ -11,7 +11,8 @@ from report.views.report import (
     add_new as add_new_report,
     schedule_report,
     ReportSchedulerViewSet,
-    run_command
+    run_command,
+    download
 )
 
 app_name = 'report'
@@ -36,6 +37,7 @@ urlpatterns = [
     path('reports_in_category/', reports_in_category, name='reports_in_category'),
     path('report_details/', report_details, name='report_details'),
     path('run_report/<uuid:report_scheduler_id>', run_report, name='run_report'),
+    path('download/<uuid:report_scheduler_id>', download, name='download'),
     path('run_command/<slug:command>', run_command, name='run_command'),
 
     path('schedule_report/', schedule_report, name='schedule_report'),

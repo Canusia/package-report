@@ -19,6 +19,7 @@ from django.http import JsonResponse
 
 from crispy_forms.utils import render_crispy_form
 from rest_framework import viewsets
+from django.http import Http404, HttpResponseRedirect
 
 from cis.models.settings import Setting
 from cis.utils import user_has_cis_role
@@ -72,6 +73,18 @@ def run_command(request, command):
             'error': e,
             'status': 'success'
         })
+
+def download(request, report_scheduler_id):
+    report = get_object_or_404(ReportScheduler, pk=report_scheduler_id)
+
+    if report.status != 'ran':
+        return Http404("Report is not ready for download")
+    
+    if report.created_by != request.user:
+        return Http404("You did not generate this report")
+    
+    url = report.summary.get('download_link')
+    return HttpResponseRedirect(url)
 
 def add_new(request):
     '''

@@ -57,9 +57,9 @@ class ReportScheduler(models.Model):
     @property
     def download_link(self):
         if self.status == 'ran':
-            return self.summary.get('download_link')
+            return 'download/' + str(self.id)
         return '-'
-
+    
     @property
     def report_args(self):
         return self.data
