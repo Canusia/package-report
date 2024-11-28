@@ -5,15 +5,17 @@ admin models
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from ..models.report import Report, ReportScheduler
+from .models.report import Report, ReportScheduler
 
 # Register your models here.
 @admin.register(Report)
 class ReportAdmin(admin.ModelAdmin):
-    list_display = (
-        'name', 'title', 'categories', 'available_for'
-    )
+    model = Report
+    list_display = [
+        'name', 'app', 'title'
+    ]
     fields = [
+        'app',
         'name',
         'title',
         'description',
