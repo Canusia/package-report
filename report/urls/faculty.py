@@ -9,7 +9,7 @@ from ..views.report import (
     add_new as add_new_report,
     download
 )
-app_name = 'highschool_admin_report'
+app_name = 'faculty_report'
 urlpatterns = [
     path('', reports, name='reports'),
     path('reports_in_category/', reports_in_category, name='reports_in_category'),

@@ -1,4 +1,5 @@
 import logging, json
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import IntegrityError
@@ -15,14 +16,15 @@ from django.template.loader import render_to_string
 
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import JsonResponse
 
 from crispy_forms.utils import render_crispy_form
 from rest_framework import viewsets
-from django.http import Http404, HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect, HttpResponse
 
 from cis.models.settings import Setting
 from cis.utils import user_has_cis_role
+
+from cis.utils import get_s3_url
 
 from cis.utils import (
     user_has_cis_role, user_has_highschool_admin_role,
@@ -31,15 +33,24 @@ from cis.utils import (
     HSADMIN_user_only,
     INSTRUCTOR_user_only
 )
-from report.models.report import Report, ReportScheduler
-from report.forms import AddReportForm
-from report.models.report import ReportSchedulerSerializer
+
+from ..models.report import Report, ReportScheduler
+from ..forms import AddReportForm
+from ..models.report import ReportSchedulerSerializer
+
+from ..tasks import process_report
 
 from cis.menu import cis_menu, draw_menu, HS_ADMIN_MENU
 
 logger = logging.getLogger(__name__)
 
 user_passes_test(user_has_cis_role, login_url='/')
+
+def extract_bucket_key(s3_url):
+    parsed = urlparse(s3_url)
+    bucket = parsed.netloc.split('.')[0]
+    key = parsed.path.lstrip('/')
+    return bucket, key
 
 class ReportSchedulerViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ReportSchedulerSerializer
@@ -84,47 +95,14 @@ def download(request, report_scheduler_id):
         return Http404("You did not generate this report")
     
     url = report.summary.get('download_link')
+    s3, key = extract_bucket_key(url)
+    
+    url = get_s3_url(key)
+
     return HttpResponseRedirect(url)
 
 def add_new(request):
-    '''
-    Add new page
-    '''
-    base_template = 'cis/logged-base.html'
-    template = 'reports/add_new.html'
-    ajax = request.GET.get('ajax', None)
-
-    if request.method == 'POST':
-        form = AddReportForm(request.POST)
-        if form.is_valid():
-            record = form.save(commit=False)
-            record.save()
-
-            messages.add_message(
-                request,
-                messages.SUCCESS,
-                'Successfully added report',
-                'list-group-item-success') 
-            return redirect('report:add_new')
-    else:
-        form = AddReportForm()
-
-    return render(
-        request,
-        template, {
-            'form': form,
-            'page_title': "Add New Report",
-            'labels': {
-                'all_items': 'All Reports'
-            },
-            'urls': {
-                'add_new': 'cis:section_add_new',
-                'all_items': 'report:reports'
-            },
-            'ajax': ajax,
-            'base_template': base_template,
-            'menu': draw_menu(cis_menu, 'reports', 'reports')
-        })
+    ...
 
 def reports(request):
     template = 'reports/index.html'
@@ -132,14 +110,14 @@ def reports(request):
     menu = {}
     intro = ''
     if user_has_cis_role(request.user):
-        menu = draw_menu(cis_menu, 'reports', 'reports')
+        menu = draw_menu(cis_menu, 'reports', 'reports', 'ce')
         categories = Report.CATEGORIES
 
     elif user_has_highschool_admin_role(request.user):
         from cis.settings.highschool_admin_portal import highschool_admin_portal as portal_lang
 
         intro = portal_lang(request).from_db().get("reports_blurb", 'Change me')
-        menu = draw_menu(HS_ADMIN_MENU, 'reports', 'reports')
+        menu = draw_menu(HS_ADMIN_MENU, 'reports', 'reports', 'highschool_admin')
         categories = [
             (Report.CLASSES, Report.CLASSES),
             (Report.STUDENTS, Report.STUDENTS),
@@ -229,15 +207,13 @@ def schedule_report(request):
                 )
                 report_scheduler.save()
 
+                task_id = process_report.enqueue(str(report_scheduler.id))
+
                 return JsonResponse({
                     'message': 'Successfully scheduled report. You will get an email once the report has run',
                     'status': 'success'
                 })
             else:
-                # 'message': 'Please correct the errors and try again.',
-                # 'details': mark_safe(str(teaching_formset.non_form_errors())),
-                # 'errors': json.dumps(errors),
-                # 'status': 'error'
                 return JsonResponse({
                     'message': 'Please correct the following errors and try again.',
                     'details': mark_safe(str(form.errors)),

@@ -5,7 +5,7 @@ from django.forms import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.utils.module_loading import import_string
 
-from report.models.report import Report
+from .models.report import Report
 
 LOGGER = logging.getLogger(__name__)
 

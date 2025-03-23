@@ -5,7 +5,7 @@ from django.urls import path, include
 
 from rest_framework import routers
 
-from report.views.report import (
+from ..views.report import (
     reports, reports_in_category,
     report_details, run_report,
     add_new as add_new_report,

@@ -193,13 +193,17 @@ class Report(models.Model):
                 available_for__contains='highschool_admin'
             )
 
+        reports = reports.order_by('title')
+
         result = {
             'reports':[]
         }
+        
         for report in reports:
             result['reports'].append({
                 'id':report.id,
                 'title':report.title
             })
+        
         return result
 

@@ -8,3 +8,4 @@ recursive-include report/static *
 recursive-include report/templates *
 recursive-include report/management *
 recursive-include report/migrations *
+recursive-include report/staticfiles *
