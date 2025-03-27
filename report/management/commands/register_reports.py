@@ -3,7 +3,8 @@ from django.contrib.auth.models import Group
 from django.conf import settings
 from django.db.utils import IntegrityError
 
-from report.models.report import Report
+from ...models.report import Report
+
 from django.utils.module_loading import import_string
 class Command(BaseCommand):
     '''
