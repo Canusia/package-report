@@ -10,6 +10,7 @@ from ..views.report import (
     report_details, run_report,
     add_new as add_new_report,
     schedule_report,
+    update_report,
     ReportSchedulerViewSet,
     run_command,
     download
@@ -41,5 +42,6 @@ urlpatterns = [
     path('run_command/<slug:command>', run_command, name='run_command'),
 
     path('schedule_report/', schedule_report, name='schedule_report'),
+    path('update_report/', update_report, name='update_report'),
     path('add_new', add_new_report, name='add_new'),
 ]

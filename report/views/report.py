@@ -164,7 +164,10 @@ def report_details(request, report_id=None):
             {
                 'form_html': form_html,
                 'title': report.title,
-                'description': report.description + f"<span class='text-white'>{report_name}</span>"
+                'description': report.description + f"<span class='text-white'>{report_name}</span>",
+                'raw_description': report.description,
+                'is_superuser': request.user.is_superuser,
+                'report_id': str(report.id),
             }
         )
         data = {
@@ -226,6 +229,30 @@ def schedule_report(request):
                 'message': 'Please correct the following errors and try again.',
                 'details': 'Exception - ' + str(e)
             }, status=400)
+
+
+@login_required(login_url='/')
+def update_report(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'status': 'error', 'message': 'Permission denied'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=405)
+
+    report_id = request.POST.get('report_id')
+    report = get_object_or_404(Report, pk=report_id)
+
+    title = request.POST.get('title', '').strip()
+    description = request.POST.get('description', '').strip()
+
+    if not title:
+        return JsonResponse({'status': 'error', 'message': 'Title is required'}, status=400)
+
+    report.title = title
+    report.description = description
+    report.save()
+
+    return JsonResponse({'status': 'success', 'message': 'Report updated successfully'})
 
 
 def run_report(request, report_scheduler_id):
