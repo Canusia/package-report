@@ -7,6 +7,7 @@ from ..views.report import (
     reports, reports_in_category,
     report_details, run_report,
     add_new as add_new_report,
+    report_status_check,
     download
 )
 app_name = 'highschool_admin_report'
@@ -16,5 +17,6 @@ urlpatterns = [
     path('report_details/', report_details, name='report_details'),path('run_report/<uuid:report_scheduler_id>', run_report, name='run_report'),
 
     path('download/<uuid:report_scheduler_id>', download, name='download'),
+    path('status_check/', report_status_check, name='report_status_check'),
     path('add_new', add_new_report, name='add_new'),
 ]

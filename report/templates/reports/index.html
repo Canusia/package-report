@@ -38,7 +38,69 @@
                 (function ($) {
 
                     $.fn.dataTable.moment( 'YYYY-M-D hh:mm A' );
-    
+
+                    // --- Smart polling state ---
+                    var pollTimer = null;
+                    var pollCount = 0;
+                    var FAST_INTERVAL = 3000;    // 3 seconds when reports are pending
+                    var SLOW_INTERVAL = 60000;   // 60 seconds idle
+                    var MAX_FAST_POLLS = 100;    // back off after ~5 minutes
+                    var lastStatuses = {};       // track previous statuses to detect changes
+
+                    function stop_polling() {
+                        if (pollTimer) {
+                            clearTimeout(pollTimer);
+                            pollTimer = null;
+                        }
+                    }
+
+                    function schedule_next_poll(interval) {
+                        stop_polling();
+                        pollTimer = setTimeout(check_report_status, interval);
+                    }
+
+                    function start_fast_polling() {
+                        pollCount = 0;
+                        check_report_status();
+                    }
+
+                    function check_report_status() {
+                        if (!report_id) return;
+
+                        $.ajax({
+                            url: 'status_check/',
+                            type: 'GET',
+                            data: { report_id: report_id },
+                            success: function(response) {
+                                // Detect if any status changed since last poll
+                                var changed = false;
+                                response.reports.forEach(function(r) {
+                                    if (lastStatuses[r.id] && lastStatuses[r.id] !== r.status) {
+                                        changed = true;
+                                    }
+                                    lastStatuses[r.id] = r.status;
+                                });
+
+                                if (changed) {
+                                    // Status changed - refresh DataTable to get full formatted data
+                                    get_report_runs();
+                                }
+
+                                if (response.has_pending) {
+                                    pollCount++;
+                                    var interval = (pollCount < MAX_FAST_POLLS) ? FAST_INTERVAL : SLOW_INTERVAL;
+                                    schedule_next_poll(interval);
+                                } else {
+                                    // No pending reports - slow poll
+                                    schedule_next_poll(SLOW_INTERVAL);
+                                }
+                            },
+                            error: function() {
+                                schedule_next_poll(SLOW_INTERVAL);
+                            }
+                        });
+                    }
+
                     function get_report_runs() {
 
                         if($.fn.DataTable.isDataTable( report_tbl )) {
@@ -50,7 +112,7 @@
                             order: [[0, 'desc']],
                             searching: false,
                             ajax: {
-                                url: '/ce/reports/api/report_scheduler/',
+                                url: 'api/report_scheduler/',
                                 data: function (d) {
                                     d.format = 'datatables';
                                     d.report_id = report_id;
@@ -64,14 +126,20 @@
                                 },
                                 {
                                     'render': function(data, type, row, meta) {
-                                        return row.status.toUpperCase()
+                                        if (row.status === 'pending') {
+                                            return '<span class="badge badge-warning"><i class="fa fa-spinner fa-spin"></i> PENDING</span>';
+                                        } else if (row.status === 'error') {
+                                            return '<span class="badge badge-danger">ERROR</span>';
+                                        }
+                                        return '<span class="badge badge-success">RAN</span>';
                                     }
                                 },
                                 {
                                     'render': function(data, type, row, meta) {
-                                        
                                         if(row.download_link != '-') {
                                             return "<a class='' href='" + row.download_link + "'>Download Report</a>"
+                                        } else if (row.status === 'pending') {
+                                            return '<span class="text-muted"><i class="fa fa-spinner fa-spin"></i> Processing...</span>';
                                         } else {
                                             return "<a class='text-white manual_run' href='./run_report/" + row.id + "'>Run Report</a>"
                                         }
@@ -83,7 +151,7 @@
 
 
                     $(document).on("click", "a.manual_run", function () {
-                        
+
                         $.blockUI();
                         $.ajax({
                             url: $(this).attr('href'),
@@ -108,7 +176,8 @@
                                     response.message,
                                     response.status
                                 )
-                                get_report_runs()
+                                get_report_runs();
+                                start_fast_polling();
                             }
                         });
 
@@ -163,10 +232,10 @@
                             error: function(xhr, status, errorThrown) {
                                 $.unblockUI();
                                 let errors = $.parseJSON(xhr.responseJSON.errors);
-                                
+
                                 var span = document.createElement('span')
                                 span.innerHTML = xhr.responseJSON.message
-                                
+
                                 let first_element = ''
                                 for (var name in errors) {
                                     for (var i in errors[name]) {
@@ -177,7 +246,7 @@
                                     }
 
                                     if(name == '__all__') {
-                                        span.innerHTML += "<br><br>" + 
+                                        span.innerHTML += "<br><br>" +
                                         errors[name][0].message
                                     }
 
@@ -196,14 +265,15 @@
 
                                 $(blocked_element).unblock();
                             },
-                            success: function (response) {                           
+                            success: function (response) {
                                 $.unblockUI();
                                 swal(
                                     "Success",
                                     response.message,
                                     'success'
                                 )
-                                get_report_runs()
+                                get_report_runs();
+                                start_fast_polling();
                             }
                         });
                     });
@@ -241,14 +311,14 @@
                                 });
 
                                 $(".dateinput").datepicker();
-                                
-                                
-                                // get run history
+
+
+                                // get run history and start slow polling
                                 report_tbl = '';
-                                get_report_runs()
-                                setInterval(function() {
-                                    get_report_runs()
-                                }, 1000 * 60);
+                                lastStatuses = {};
+                                get_report_runs();
+                                stop_polling();
+                                schedule_next_poll(SLOW_INTERVAL);
                             }
                         });
 

@@ -101,6 +101,36 @@ def download(request, report_scheduler_id):
 
     return HttpResponseRedirect(url)
 
+@login_required(login_url='/')
+def report_status_check(request):
+    report_id = request.GET.get('report_id')
+    if not report_id:
+        return JsonResponse({'reports': [], 'has_pending': False})
+
+    schedulers = ReportScheduler.objects.filter(
+        created_by=request.user,
+        report__id=report_id
+    ).order_by('-created_on')[:20]
+
+    reports = []
+    for s in schedulers:
+        download = '-'
+        if s.status == 'ran' and s.summary:
+            download = 'download/' + str(s.id)
+        reports.append({
+            'id': str(s.id),
+            'status': s.status,
+            'download_link': download,
+        })
+
+    has_pending = any(r['status'] == 'pending' for r in reports)
+
+    return JsonResponse({
+        'reports': reports,
+        'has_pending': has_pending,
+    })
+
+
 def add_new(request):
     ...
 
@@ -214,7 +244,8 @@ def schedule_report(request):
 
                 return JsonResponse({
                     'message': 'Successfully scheduled report. You will get an email once the report has run',
-                    'status': 'success'
+                    'status': 'success',
+                    'report_scheduler_id': str(report_scheduler.id),
                 })
             else:
                 return JsonResponse({

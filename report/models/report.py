@@ -48,7 +48,8 @@ class ReportScheduler(models.Model):
     status = models.CharField(
         choices=[
             ('pending', 'Pending'),
-            ('ran', 'Ran')
+            ('ran', 'Ran'),
+            ('error', 'Error'),
         ],
         max_length=20,
         default='pending'
