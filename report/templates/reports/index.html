@@ -28,8 +28,20 @@
             }
         </style>
         <div class="col-md-12 col-sm-12 mb-4">
+            <!-- Page-level tabs -->
+            <ul class="nav nav-tabs mb-3" id="page-tabs" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active" id="tab-reports" data-toggle="tab" href="#pane-reports" role="tab">Reports</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="tab-my-reports" data-toggle="tab" href="#pane-my-reports" role="tab">My Reports</a>
+                </li>
+            </ul>
+
+            <div class="tab-content">
+            <!-- Reports tab -->
+            <div class="tab-pane fade show active" id="pane-reports" role="tabpanel">
             <p class="alert alert-info">Click on a category to view available reports</p>
-            <!-- Latest compiled and minified CSS -->
             <script>
                 var report_id = '';
                 var report_tbl;
@@ -326,6 +338,58 @@
                         else event.returnValue = false;
                     });
 
+                    // --- My Reports tab ---
+                    var myReportsTbl;
+
+                    $(document).on('shown.bs.tab', '#tab-my-reports', function () {
+                        if ($.fn.DataTable.isDataTable('#my_reports_tbl')) {
+                            myReportsTbl.ajax.reload(null, false);
+                            return;
+                        }
+
+                        myReportsTbl = $('#my_reports_tbl').DataTable({
+                            order: [[0, 'desc']],
+                            ajax: {
+                                url: 'api/report_scheduler/',
+                                data: function (d) {
+                                    d.format = 'datatables';
+                                }
+                            },
+                            columns: [
+                                {
+                                    'render': function(data, type, row, meta) {
+                                        return row.created_on;
+                                    }
+                                },
+                                {
+                                    'render': function(data, type, row, meta) {
+                                        return row.report_title || '-';
+                                    }
+                                },
+                                {
+                                    'render': function(data, type, row, meta) {
+                                        if (row.status === 'pending') {
+                                            return '<span class="badge badge-warning"><i class="fa fa-spinner fa-spin"></i> PENDING</span>';
+                                        } else if (row.status === 'error') {
+                                            return '<span class="badge badge-danger">ERROR</span>';
+                                        }
+                                        return '<span class="badge badge-success">RAN</span>';
+                                    }
+                                },
+                                {
+                                    'render': function(data, type, row, meta) {
+                                        if (row.download_link != '-') {
+                                            return "<a href='" + row.download_link + "'>Download Report</a>";
+                                        } else if (row.status === 'pending') {
+                                            return '<span class="text-muted"><i class="fa fa-spinner fa-spin"></i> Processing...</span>';
+                                        }
+                                        return '-';
+                                    }
+                                }
+                            ]
+                        });
+                    });
+
                 })(jQuery);
             </script>
             <div id="report-list-container" class="well well-sm bg-white pt-3 p-2">
@@ -349,6 +413,26 @@
             <div id="cepm-report-container" style="margin: 0.5em 0; background: #fff; float: left; width: 100%;">
             </div>
             &nbsp;
+            </div><!-- end pane-reports -->
+
+            <!-- My Reports tab -->
+            <div class="tab-pane fade" id="pane-my-reports" role="tabpanel">
+                <div class="bg-white p-3">
+                    <h4>My Report Runs</h4>
+                    <table id="my_reports_tbl" style="width: 100%;" class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Report Name</th>
+                                <th>Status</th>
+                                <th>Download</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+            </div><!-- end pane-my-reports -->
+
+            </div><!-- end tab-content -->
         </div>
     </div> <!-- end row -->
 </main>

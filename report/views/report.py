@@ -60,10 +60,10 @@ class ReportSchedulerViewSet(viewsets.ReadOnlyModelViewSet):
         report_id = self.request.GET.get('report_id')
         user_id = self.request.user.id
 
-        return ReportScheduler.objects.filter(
-            created_by__id=user_id,
-            report__id=report_id
-        )
+        qs = ReportScheduler.objects.filter(created_by__id=user_id)
+        if report_id:
+            qs = qs.filter(report__id=report_id)
+        return qs.select_related('report')
 
 def run_command(request, command):
 

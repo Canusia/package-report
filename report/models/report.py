@@ -124,6 +124,10 @@ class ReportSchedulerSerializer(serializers.ModelSerializer):
     created_on = serializers.DateTimeField(format='%Y-%m-%d %I:%M %p')
     ran_on = serializers.DateTimeField(format='%Y-%m-%d %I:%M %p')
     download_link = serializers.CharField()
+    report_title = serializers.SerializerMethodField()
+
+    def get_report_title(self, obj):
+        return obj.report.title if obj.report else ''
 
     class Meta:
         model = ReportScheduler
@@ -132,7 +136,8 @@ class ReportSchedulerSerializer(serializers.ModelSerializer):
         datatables_always_serialize = [
             'id',
             'download_link',
-            'status'
+            'status',
+            'report_title',
         ]
 
 class Report(models.Model):
