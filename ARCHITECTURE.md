@@ -22,6 +22,8 @@ Registry entry for a report definition.
 
 Key method: `get_reports_in_category(category, user)` filters reports by category and user role.
 
+Superusers can edit report title and description inline from the Description tab in the UI.
+
 ### ReportScheduler
 
 Tracks each report execution.
@@ -90,21 +92,75 @@ class CisConfig(AppConfig):
 
 `python manage.py register_reports` scans all `INSTALLED_APPS` for a `REPORTS` attribute on the AppConfig and creates corresponding `Report` database entries.
 
+## Workflows
+
+### 1. Report Generation Workflow
+
+```
+User → Reports Page → Select Category → Select Report → Fill Form → Generate Export
+  → ReportScheduler created (status=pending)
+  → process_report task enqueued (django-tasks)
+  → db_worker picks up task
+  → Report class dynamically imported: {app}.reports.{name}.{name}
+  → report.run(task, data) executes
+  → Output saved to S3 via PrivateMediaStorage
+  → status=ran, download_link stored in summary
+  → Email sent to requester
+  → User downloads via presigned S3 URL
+```
+
+**Status transitions:** `pending` → `ran` (success) or `pending` → `error` (exception)
+
+### 2. Smart Polling Workflow
+
+The UI uses smart polling to provide near-instant feedback when reports complete:
+
+1. **After scheduling:** frontend polls `status_check/` every 3 seconds
+2. **Status change detected:** DataTable refreshes to show updated status and download link
+3. **Backoff:** after ~5 minutes of fast polling, falls back to 60-second intervals
+4. **No pending reports:** remains on 60-second slow poll
+5. **Report switch:** clears existing poll timer, starts fresh
+
+The `status_check/` endpoint is lightweight — returns only `id`, `status`, `download_link`, and a `has_pending` flag, avoiding full DRF serialization overhead.
+
+### 3. Report Registration Workflow
+
+```
+Developer creates {app}/reports/{name}.py
+  → Adds entry to AppConfig.REPORTS list
+  → Runs: python manage.py register_reports
+  → Report record created in database
+  → Report appears in UI under configured categories
+```
+
+### 4. Superuser Report Editing Workflow
+
+Superusers can edit report title and description directly from the UI:
+
+1. Select a report → Description tab shows an **Edit** button
+2. Click Edit → inline form with Title and Description fields
+3. Save → AJAX POST to `update_report/` → updates Report model
+4. UI updates the title in the header and sidebar without page reload
+
+### 5. My Reports Workflow
+
+The **My Reports** tab provides a consolidated view of all report runs for the current user across all report types:
+
+1. User clicks "My Reports" tab on the reports page
+2. DataTable loads from `api/report_scheduler/` (no report_id filter)
+3. Shows: Date, Report Name, Status (with badges), Download link
+4. Table refreshes each time the tab is activated
+
 ## Execution Flow
 
 1. **User selects category** → AJAX GET to `reports_in_category/` returns matching reports filtered by role
 2. **User selects report** → AJAX GET to `report_details/` dynamically imports `{app}.reports.{name}.{name}`, instantiates with `request`, renders crispy form
 3. **User submits form** → POST to `schedule_report/` validates form, creates `ReportScheduler(status='pending')`, enqueues `process_report` task
-4. **Worker processes task** → `ReportScheduler.run()` dynamically imports report class, calls `report.run(task, data)`, report generates output and saves to S3 via `PrivateMediaStorage`
-5. **Completion** → status set to `ran`, `summary.download_link` populated, requester emailed
-6. **User downloads** → GET to `download/{id}` validates ownership, returns presigned S3 URL redirect
-
-```
-User → [Select Category] → AJAX → [Select Report] → AJAX → [Submit Form]
-  → POST → ReportScheduler(pending) → django-tasks queue
-  → db_worker → ReportScheduler.run() → {app}.reports.{name}.{name}.run()
-  → S3 upload → status=ran → email notification → User downloads
-```
+4. **Smart polling begins** → frontend polls `status_check/` every 3 seconds
+5. **Worker processes task** → `ReportScheduler.run()` dynamically imports report class, calls `report.run(task, data)`, report generates output and saves to S3 via `PrivateMediaStorage`
+6. **Completion** → status set to `ran`, `summary.download_link` populated, requester emailed
+7. **Frontend detects change** → DataTable refreshes, download link appears
+8. **User downloads** → GET to `download/{id}` validates ownership, returns presigned S3 URL redirect
 
 ## Task Queue
 
@@ -128,14 +184,16 @@ Fallback: `python manage.py run_reports` batch-executes all pending reports (for
 
 | View | Method | Purpose |
 |------|--------|---------|
-| `reports()` | GET | Main reports page with category sidebar |
+| `reports()` | GET | Main reports page with category sidebar and tabs |
 | `reports_in_category()` | AJAX GET | Reports filtered by category and role |
 | `report_details()` | AJAX GET | Dynamically rendered report form |
 | `schedule_report()` | POST | Validate form, create scheduler, enqueue task |
+| `report_status_check()` | AJAX GET | Lightweight status polling endpoint |
+| `update_report()` | POST | Superuser: update report title/description |
 | `run_report()` | GET | Manually execute a pending report |
 | `download()` | GET | Presigned S3 URL for completed report |
 | `run_command()` | GET | Execute management command (CE admin only) |
-| `ReportSchedulerViewSet` | REST API | Read-only report history for DataTables |
+| `ReportSchedulerViewSet` | REST API | Report history for DataTables (filterable by report_id) |
 
 ## URL Routing
 
@@ -143,14 +201,14 @@ Three URL configs provide role-based access:
 
 | Portal | Path | URL Config | Notes |
 |--------|------|-----------|-------|
-| CE (admin) | `/ce/reports/` | `report.urls.ce` | Full access including `run_command` and REST API |
+| CE (admin) | `/ce/reports/` | `report.urls.ce` | Full access including `run_command`, `update_report`, and REST API |
 | Faculty | `/faculty/reports/` | `report.urls.faculty` | Standard access |
 | HS Admin | `/highschool_admin/reports/` | `report.urls.highschool_admin` | Standard access |
 
 ## Templates
 
-- **`index.html`** — Main UI with category sidebar, report list, form area, and DataTables execution history (auto-refreshes every 60s)
-- **`report.html`** — Report detail view with form and recent runs tabs
+- **`index.html`** — Main UI with page-level tabs (Reports / My Reports), category sidebar, report list, form area, smart polling, and DataTables
+- **`report.html`** — Report detail view with form, Description tab (editable for superusers), and Recent Runs tab
 - **`base.html`** — Minimal bootstrap layout for standalone rendering
 
 ## File Structure
@@ -159,7 +217,7 @@ Three URL configs provide role-based access:
 report/
 ├── report/
 │   ├── models/
-│   │   └── report.py          # Report, ReportScheduler
+│   │   └── report.py          # Report, ReportScheduler, Serializer
 │   ├── views/
 │   │   └── report.py          # All view functions + ViewSet
 │   ├── urls/
@@ -167,8 +225,8 @@ report/
 │   │   ├── faculty.py         # Faculty routes
 │   │   └── highschool_admin.py
 │   ├── templates/reports/
-│   │   ├── index.html         # Main reports UI
-│   │   ├── report.html        # Report detail + form
+│   │   ├── index.html         # Main reports UI (tabs, polling, DataTables)
+│   │   ├── report.html        # Report detail + form + inline edit
 │   │   └── base.html
 │   ├── management/commands/
 │   │   ├── register_reports.py
@@ -178,7 +236,9 @@ report/
 │   ├── forms.py               # AddReportForm
 │   └── tasks.py               # process_report async task
 ├── ARCHITECTURE.md
+├── PRODUCT_GUIDE.md
 ├── CLAUDE.md
+├── README.rst
 └── pyproject.toml
 ```
 
