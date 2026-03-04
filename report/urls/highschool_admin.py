@@ -17,6 +17,7 @@ from ..views.report import (
     download
 )
 
+app_name = 'highschool_admin_report'
 
 router = routers.DefaultRouter()
 router_viewsets = {
