@@ -189,7 +189,14 @@ def report_details(request, report_id=None):
         ctx.update(csrf(request))
         form_html = render_crispy_form(form, context=ctx)
 
-        use_as_datasource = bool(getattr(report_class, 'use_as_datasource', False))
+        # "Use as datasource" hands off to the announcement bulk-mailer, which
+        # only has the handoff endpoint in newer versions. Gated behind a
+        # default-off flag so the button never shows unless a deployment whose
+        # announcement supports it opts in (settings.REPORTS_USE_AS_DATASOURCE_ENABLED = True).
+        use_as_datasource = (
+            bool(getattr(report_class, 'use_as_datasource', False))
+            and bool(getattr(settings, 'REPORTS_USE_AS_DATASOURCE_ENABLED', False))
+        )
 
         report_html = render_to_string(
             'reports/report.html',
