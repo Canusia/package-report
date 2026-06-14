@@ -8,8 +8,12 @@
         </div>
     </div>
     <div class="col-6">
-        <div class="p-3">
+        <div class="p-3" id="report-form-container">
             {{form_html}}
+            {% if use_as_datasource %}
+            <button type="button" class="btn btn-outline-primary btn-sm mt-2"
+                    onclick="useReportAsDatasource('{{report_id}}', this)">Use as datasource</button>
+            {% endif %}
         </div>
     </div>
     <div class="col-6">
@@ -78,6 +82,20 @@
         </div>
     </div>
 </div>
+
+<script>
+function useReportAsDatasource(reportId, btn) {
+    // The report's crispy form is a sibling of this button within the container.
+    var $container = $(btn).closest('#report-form-container');
+    var $form = $container.find('form').first();
+    if (!$form.length) { $form = $(btn).closest('form'); }
+    var data = $form.serializeArray();
+    data.push({name: 'report_id', value: reportId});
+    $.post('/ce/announcements/bulk_message/use_report_as_datasource', data, function (r) {
+        if (r.status === 'success' && r.redirect_to) { window.location = r.redirect_to; }
+    });
+}
+</script>
 
 {% if is_superuser %}
 <script>

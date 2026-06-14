@@ -189,6 +189,8 @@ def report_details(request, report_id=None):
         ctx.update(csrf(request))
         form_html = render_crispy_form(form, context=ctx)
 
+        use_as_datasource = bool(getattr(report_class, 'use_as_datasource', False))
+
         report_html = render_to_string(
             'reports/report.html',
             {
@@ -198,6 +200,7 @@ def report_details(request, report_id=None):
                 'raw_description': report.description,
                 'is_superuser': request.user.is_superuser,
                 'report_id': str(report.id),
+                'use_as_datasource': use_as_datasource,
             }
         )
         data = {
