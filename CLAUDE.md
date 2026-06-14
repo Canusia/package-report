@@ -70,6 +70,43 @@ Report class location: `{app}.reports.{name}.{name}` with a `run(scheduler, data
    - Stores download_link in summary
    - Emails requester
 
+## Use as datasource (bulk mailer)
+
+A report can double as a recipient datasource for the `announcement` bulk mailer.
+The report form class opts in with:
+
+```python
+class my_report(forms.Form):
+    use_as_datasource = True
+    datasource_descriptor = 'Short blurb shown in the mailer.'
+    email_column = 'email'
+    name_columns = ['FirstName', 'LastName']
+
+    def recipient_columns(self):
+        return {'first_name': 'FirstName', 'last_name': 'LastName', 'email': 'email'}
+
+    def get_recipients(self, data):
+        # return [{'FirstName':..., 'LastName':..., 'email': [addr]}] from the report's query
+        ...
+```
+
+`report_details` then renders a **"Use as datasource"** button next to "Generate
+Export", but only when **both**:
+- the report class sets `use_as_datasource = True`, AND
+- `settings.REPORTS_USE_AS_DATASOURCE_ENABLED` is truthy (**default off**).
+
+The flag is default-off because the handoff depends on a compatible `announcement`
+version (the `bulk_message_use_report_as_datasource` endpoint). Enable per tenant
+once their announcement supports it:
+
+```python
+# tenant settings.py
+REPORTS_USE_AS_DATASOURCE_ENABLED = True
+```
+
+The button POSTs the report's filters to the announcement handoff, which creates a
+`BulkMessage` backed by `report:<id>` and redirects to the compose page.
+
 ## Integration
 
 - **Async Processing:** Uses `django-tasks` with 'reports' queue
