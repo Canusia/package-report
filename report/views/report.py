@@ -385,7 +385,7 @@ class SuperuserOnly(BasePermission):
         return _is_superuser(request.user)
 
 
-SUMMARY_WINDOWS = {'1m': 30, '3m': 90}
+SUMMARY_WINDOWS = {'1m': 30, '3m': 90, '6m': 180, '12m': 365}
 # Derived from the model so it cannot drift from ReportScheduler.status.
 STATUSES = tuple(
     c[0] for c in ReportScheduler._meta.get_field('status').choices)

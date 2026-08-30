@@ -34,7 +34,7 @@ Available at `/ce/reports/`, `/faculty/reports/`, `/highschool_admin/reports/`:
 - `api/report_scheduler/` - REST endpoint, scoped to `request.user`
 
 CE-only (`report.urls.ce`), superuser-only, backing the Report Analytics tab:
-- `api/run_summary/` - GET, aggregate run counts (`?window=1m|3m`)
+- `api/run_summary/` - GET, aggregate run counts (`?window=1m|3m|6m|12m`)
 - `api/all_report_scheduler/` - GET, every user's runs (not scoped to `request.user`)
 - `bulk_actions` - POST, dispatches `bulk_run_reports` / `bulk_delete_reports` via the
   `ActionRegistry` in `report/actions.py`; both act on `status='pending'` runs only

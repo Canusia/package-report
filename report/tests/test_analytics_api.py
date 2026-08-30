@@ -37,6 +37,17 @@ class RunSummaryTests(TestCase):
         self.assertEqual(body['by_user'][0]['email'], 'alice@example.com')
         self.assertEqual(body['by_user'][0]['total'], 3)
 
+    def test_six_and_twelve_month_windows(self):
+        make_scheduler(self.report, self.alice, status='ran', days_ago=3)
+        make_scheduler(self.report, self.alice, status='ran', days_ago=120)
+        make_scheduler(self.report, self.alice, status='ran', days_ago=300)
+
+        totals = {
+            w: self.client.get(SUMMARY, {'window': w}).json()['totals']['total']
+            for w in ('1m', '3m', '6m', '12m')
+        }
+        self.assertEqual(totals, {'1m': 1, '3m': 1, '6m': 2, '12m': 3})
+
     def test_invalid_window_rejected(self):
         self.assertEqual(
             self.client.get(SUMMARY, {'window': '99y'}).status_code, 400)

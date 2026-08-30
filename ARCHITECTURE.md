@@ -158,7 +158,7 @@ but the view-level floor on `bulk_actions` is a CIS role, not superuser:
 
 ```mermaid
 flowchart TD
-    A[Superuser opens Report Analytics tab] --> B[GET api/run_summary/?window=1m|3m]
+    A[Superuser opens Report Analytics tab] --> B[GET api/run_summary/?window=1m|3m|6m|12m]
     B --> C[Stat tiles + runs-by-report / runs-by-user tables]
     A --> D[GET api/all_report_scheduler/]
     D --> E[Scheduled Reports DataTable, every user's runs]
@@ -172,7 +172,7 @@ flowchart TD
 ```
 
 - **`api/run_summary/`** (`ReportRunSummaryView`) — aggregates `ReportScheduler` rows
-  created within the window (`1m` or `3m`) into overall totals, per-report totals, and
+  created within the window (`1m`, `3m`, `6m` or `12m`) into overall totals, per-report totals, and
   per-user totals, each split by `pending`/`ran`/`error`.
   The window is measured on `ReportScheduler.created_on`, which is `auto_now=True`, so
   it reflects each run's last modification (a `run()` rewrites it) rather than the time
@@ -251,7 +251,7 @@ Fallback: `python manage.py run_reports` batch-executes all pending reports (for
 | `download()` | GET | Presigned S3 URL for completed report |
 | `run_command()` | GET | Execute management command (CE admin only) |
 | `ReportSchedulerViewSet` | REST API | Report history for DataTables, scoped to `request.user` |
-| `ReportRunSummaryView` | REST API, GET | Superuser-only aggregate run counts (`?window=1m\|3m`) |
+| `ReportRunSummaryView` | REST API, GET | Superuser-only aggregate run counts (`?window=1m\|3m\|6m\|12m`) |
 | `AllReportSchedulerViewSet` | REST API | Superuser-only, every user's runs (no `request.user` scoping) |
 | `report_bulk_actions()` | POST | Superuser-only dispatch into `report.actions.report_actions` |
 
