@@ -27,7 +27,7 @@ class RunPendingActionTests(TestCase):
         pending = make_scheduler(self.report, self.user, status='pending')
         already_ran = make_scheduler(self.report, self.user, status='ran')
 
-        with patch('report.report.admin.process_report') as task:
+        with patch('report.report.actions.process_report') as task:
             resp = self._run_action([pending, already_ran])
 
         self.assertEqual(resp.status_code, 200)
@@ -37,7 +37,7 @@ class RunPendingActionTests(TestCase):
 
     def test_no_pending_rows_queues_nothing(self):
         ran = make_scheduler(self.report, self.user, status='ran')
-        with patch('report.report.admin.process_report') as task:
+        with patch('report.report.actions.process_report') as task:
             self._run_action([ran])
         task.enqueue.assert_not_called()
 

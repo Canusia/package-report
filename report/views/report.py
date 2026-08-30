@@ -377,12 +377,18 @@ def run_report(request, report_scheduler_id):
 
 class SuperuserOnly(BasePermission):
     def has_permission(self, request, view):
-        user = request.user
-        return bool(user and user.is_authenticated and user.is_superuser)
+        # One definition of "is superuser", shared with the ActionRegistry
+        # handlers. Imported lazily: actions.py pulls in
+        # myce.component_registry, which must not be imported at view-module
+        # import time.
+        from ..actions import _is_superuser
+        return _is_superuser(request.user)
 
 
 SUMMARY_WINDOWS = {'1m': 30, '3m': 90}
-STATUSES = ('pending', 'ran', 'error')
+# Derived from the model so it cannot drift from ReportScheduler.status.
+STATUSES = tuple(
+    c[0] for c in ReportScheduler._meta.get_field('status').choices)
 
 
 class ReportRunSummaryView(APIView):
@@ -430,7 +436,8 @@ class ReportRunSummaryView(APIView):
                 runs.values('created_by__id', 'created_by__first_name',
                             'created_by__last_name', 'created_by__email')
                     .annotate(n=Count('id'))
-                    .order_by('-n')[:25]
+                    # Deterministic tie-break so the Top 25 cut is stable.
+                    .order_by('-n', 'created_by__email')[:25]
             )
         ]
 
@@ -481,6 +488,7 @@ class AllReportSchedulerViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @login_required(login_url='/')
+@user_passes_test(user_has_cis_role, login_url='/')
 def report_bulk_actions(request):
     """Dispatch point for superuser bulk actions on queued report runs."""
     from ..actions import report_actions

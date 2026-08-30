@@ -146,7 +146,15 @@ Superusers can edit report title and description directly from the UI:
 
 A "Report Analytics" tab on `/ce/reports/` is rendered only when
 `request.user.is_superuser`. It combines two read endpoints and one write endpoint,
-all gated by the same `SuperuserOnly` permission class:
+gated by two different mechanisms: the two read endpoints
+(`ReportRunSummaryView`, `AllReportSchedulerViewSet`) are DRF views carrying
+`permission_classes = [SuperuserOnly]`, while `bulk_actions` is a plain Django
+view gated by `@login_required` + `@user_passes_test(user_has_cis_role)` whose
+per-action authorization lives on each registered action
+(`permission=_is_superuser`) and is enforced by `ActionRegistry.dispatch`
+before the handler runs. `SuperuserOnly.has_permission` delegates to that same
+`_is_superuser` predicate, so both paths share one definition of "superuser",
+but the view-level floor on `bulk_actions` is a CIS role, not superuser:
 
 ```mermaid
 flowchart TD
@@ -166,6 +174,12 @@ flowchart TD
 - **`api/run_summary/`** (`ReportRunSummaryView`) — aggregates `ReportScheduler` rows
   created within the window (`1m` or `3m`) into overall totals, per-report totals, and
   per-user totals, each split by `pending`/`ran`/`error`.
+  The window is measured on `ReportScheduler.created_on`, which is `auto_now=True`, so
+  it reflects each run's last modification (a `run()` rewrites it) rather than the time
+  it was requested; splitting `created_on`/`updated_on` is a follow-up that needs a
+  model change and a data migration. The Scheduled Reports table labels that column
+  **Last Updated** for the same reason. Runs-by-user is capped at the top 25
+  requesters, so its totals need not sum to the Total Runs tile.
 - **`api/all_report_scheduler/`** (`AllReportSchedulerViewSet`) — a `ReadOnlyModelViewSet`
   over every user's runs, unlike `ReportSchedulerViewSet` which stays scoped to
   `request.user`; that scoping is the authorization boundary for CE staff and must not

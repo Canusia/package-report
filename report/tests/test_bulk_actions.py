@@ -5,7 +5,7 @@ from django.test import Client, TestCase
 from ..models.report import ReportScheduler
 from .factories import login, make_report, make_scheduler, make_user
 
-URL = '/ce/reports/bulk_actions'
+URL = '/ce/reports/bulk_actions/'
 
 
 class BulkRunTests(TestCase):

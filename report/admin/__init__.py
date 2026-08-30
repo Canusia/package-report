@@ -6,31 +6,53 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.db.models import Count
 
+from ..actions import queue_pending, queued_message
 from ..models.report import Report, ReportScheduler
-from ..tasks import process_report
+
+
+class _MultiChoiceFilter(admin.SimpleListFilter):
+    """Filter a MultiSelectField (a CharField holding "A,B") with __contains.
+
+    The default ChoicesFieldListFilter builds `field__exact='A'`, which misses
+    every row that holds more than one value — the normal case here.
+    """
+    field_name = None
+    choices_source = ()
+
+    def lookups(self, request, model_admin):
+        return list(self.choices_source)
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if not value:
+            return queryset
+        return queryset.filter(**{f'{self.field_name}__contains': value})
+
+
+class CategoriesFilter(_MultiChoiceFilter):
+    title = 'Categories'
+    parameter_name = 'categories'
+    field_name = 'categories'
+    choices_source = Report.CATEGORIES
+
+
+class AvailableForFilter(_MultiChoiceFilter):
+    title = 'Available For'
+    parameter_name = 'available_for'
+    field_name = 'available_for'
+    choices_source = Report.AVAILABLE_FOR
+
 
 class ReportAdmin(admin.ModelAdmin):
     model = Report
 
     list_display = [
-        'title', 'name', 'app', 'categories_display', 'available_for_display',
+        'title', 'name', 'app',
+        'get_categories_display', 'get_available_for_display',
     ]
-    list_filter = ['app', 'categories', 'available_for']
+    list_filter = ['app', CategoriesFilter, AvailableForFilter]
     search_fields = ['title', 'name', 'description']
     ordering = ['title']
-
-    @staticmethod
-    def _labels(values, choices):
-        lookup = dict(choices)
-        return ', '.join(lookup.get(value, value) for value in values)
-
-    @admin.display(description='Categories')
-    def categories_display(self, obj):
-        return self._labels(obj.get_categories_list(), Report.CATEGORIES)
-
-    @admin.display(description='Available For')
-    def available_for_display(self, obj):
-        return self._labels(obj.get_available_for_list(), Report.AVAILABLE_FOR)
 
     def _run_counts(self, report):
         """All-time run counts for *report*, one row per requesting user,
@@ -94,17 +116,9 @@ class ReportSchedulerAdmin(admin.ModelAdmin):
 
     @admin.action(description='Run selected pending reports')
     def run_selected_pending_reports(self, request, queryset):
-        pending = list(
-            queryset.filter(status='pending').values_list('id', flat=True))
-        for pk in pending:
-            process_report.enqueue(str(pk))
-        skipped = queryset.count() - len(pending)
-        self.message_user(
-            request,
-            f'Queued {len(pending)} report(s); '
-            f'skipped {skipped} that were not pending.',
-        )
-
+        queued, skipped = queue_pending(
+            queryset.values_list('id', flat=True))
+        self.message_user(request, queued_message(queued, skipped))
 
 admin.site.register(ReportScheduler, ReportSchedulerAdmin)
 admin.site.register(Report, ReportAdmin)

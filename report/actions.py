@@ -44,6 +44,30 @@ def _is_superuser(user):
     return bool(user and user.is_authenticated and user.is_superuser)
 
 
+def queue_pending(ids):
+    """Enqueue every pending run in *ids*. Returns (queued, skipped).
+
+    The single implementation of the pending-only queueing rule, shared by the
+    CE bulk action and ReportSchedulerAdmin.run_selected_pending_reports.
+    Anything in *ids* that is not a pending run — a malformed id, an id that
+    does not exist, or a run already 'ran'/'error' — counts as skipped.
+    """
+    ids = list(ids or [])
+    pending = list(
+        ReportScheduler.objects
+        .filter(id__in=_valid_uuids(ids), status='pending')
+        .values_list('id', flat=True)
+    )
+    for pk in pending:
+        process_report.enqueue(str(pk))
+    return len(pending), len(ids) - len(pending)
+
+
+def queued_message(queued, skipped):
+    return (f'Queued {queued} report(s); '
+            f'skipped {skipped} that were not pending.')
+
+
 report_actions = ActionRegistry(OrderedDict({
     'bulk_scheduler': {'actions': OrderedDict()},
 }))
@@ -61,23 +85,14 @@ report_actions = ActionRegistry(OrderedDict({
     permission=_is_superuser,
 )
 def bulk_run_reports(request):
-    ids = _valid_uuids(request.POST.getlist('ids[]'))
-    pending = list(
-        ReportScheduler.objects
-        .filter(id__in=ids, status='pending')
-        .values_list('id', flat=True)
-    )
-    for pk in pending:
-        process_report.enqueue(str(pk))
-
-    skipped = len(request.POST.getlist('ids[]')) - len(pending)
+    raw_ids = request.POST.getlist('ids[]')
+    queued, skipped = queue_pending(raw_ids)
     return JsonResponse({
         'outcome': 'call',
         'fn': 'refreshTable',
         'args': {
             'title': 'Done',
-            'message': (f'Queued {len(pending)} report(s); '
-                        f'skipped {skipped} that were not pending.'),
+            'message': queued_message(queued, skipped),
             'status': 'success',
         },
     })

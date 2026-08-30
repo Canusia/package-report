@@ -466,7 +466,7 @@
 
                 <div class="card border-top-0 mb-3">
                     <div class="card-body">
-                        <h5>Runs by User</h5>
+                        <h5>Runs by User (Top 25)</h5>
                         <table id="analytics_by_user" style="width: 100%;" class="table table-striped">
                             <thead><tr><th>User</th><th>Email</th><th>Total</th></tr></thead>
                         </table>
@@ -489,7 +489,7 @@
                             <thead>
                                 <tr>
                                     <th></th>
-                                    <th data-name="created_on">Requested</th>
+                                    <th data-name="created_on">Last Updated</th>
                                     <th data-name="report__title">Report</th>
                                     <th data-name="created_by__last_name">Requested By</th>
                                     <th data-name="status">Status</th>
@@ -559,7 +559,7 @@
                         }
                     ],
                     ajax: {
-                        url: '/ce/reports/api/all_report_scheduler/',
+                        url: '{% url "report:all_report_scheduler-list" %}',
                         data: function (d) { d.status = $('#analytics_status').val(); }
                     },
                     order: [[1, 'desc']],
