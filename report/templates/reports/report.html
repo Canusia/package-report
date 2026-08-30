@@ -49,6 +49,22 @@
                                             <label for="edit-report-description"><strong>Description</strong></label>
                                             <textarea class="form-control" id="edit-report-description" rows="3">{{raw_description}}</textarea>
                                         </div>
+                                        <div class="form-group mb-3">
+                                            <label for="edit-report-categories"><strong>Categories</strong></label>
+                                            <select multiple class="form-control" id="edit-report-categories">
+                                                {% for value, label in all_categories %}
+                                                <option value="{{ value }}"{% if value in selected_categories %} selected{% endif %}>{{ label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="form-group mb-3">
+                                            <label for="edit-report-available-for"><strong>Available For</strong></label>
+                                            <select multiple class="form-control" id="edit-report-available-for">
+                                                {% for value, label in all_available_for %}
+                                                <option value="{{ value }}"{% if value in selected_available_for %} selected{% endif %}>{{ label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
                                         <button type="button" class="btn btn-sm btn-primary" id="btn-save-report">Save</button>
                                         <button type="button" class="btn btn-sm btn-secondary" id="btn-cancel-edit">Cancel</button>
                                     </div>
@@ -122,14 +138,23 @@ function useReportAsDatasource(reportId, btn) {
             return;
         }
 
-        $.post({
+        $.ajax({
             url: 'update_report/',
+            type: 'POST',
             data: {
                 report_id: reportId,
                 title: title,
                 description: description,
+                categories: $('#edit-report-categories').val() || [],
+                available_for: $('#edit-report-available-for').val() || [],
                 csrfmiddlewaretoken: csrftoken
             },
+            // traditional:true serialises arrays as repeated bare keys
+            // (categories=Classes&categories=Misc.), which is what
+            // request.POST.getlist('categories') reads. The jQuery default
+            // (false) would send categories[]=... and the view would see an
+            // empty list.
+            traditional: true,
             success: function(response) {
                 $('#report-title').text(title);
                 $('#report-list li.active').text(title);
@@ -144,8 +169,10 @@ function useReportAsDatasource(reportId, btn) {
 
                 swal('Success', response.message, 'success');
             },
-            error: function() {
-                swal('Error', 'Failed to update report', 'error');
+            error: function(xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                    || 'Failed to update report';
+                swal('Error', msg, 'error');
             }
         });
     });
