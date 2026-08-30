@@ -36,6 +36,11 @@
                 <li class="nav-item">
                     <a class="nav-link" id="tab-my-reports" data-toggle="tab" href="#pane-my-reports" role="tab">My Reports</a>
                 </li>
+                {% if request.user.is_superuser %}
+                <li class="nav-item">
+                    <a class="nav-link" id="tab-analytics" data-toggle="tab" href="#pane-analytics" role="tab">Report Analytics</a>
+                </li>
+                {% endif %}
             </ul>
 
             <div class="tab-content">
@@ -431,6 +436,168 @@
                     </table>
                 </div>
             </div><!-- end pane-my-reports -->
+
+            {% if request.user.is_superuser %}
+            <div class="tab-pane fade" id="pane-analytics" role="tabpanel">
+                <div class="card mb-3">
+                    <div class="card-body bg-gray-200">
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Summary window">
+                            <button type="button" class="btn btn-primary" data-window="1m">1 Month</button>
+                            <button type="button" class="btn btn-outline-primary" data-window="3m">3 Months</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-3 col-6"><div class="card"><div class="card-body"><small class="text-muted">Total Runs</small><h3 id="stat-total">0</h3></div></div></div>
+                    <div class="col-md-3 col-6"><div class="card"><div class="card-body"><small class="text-muted">Ran</small><h3 id="stat-ran">0</h3></div></div></div>
+                    <div class="col-md-3 col-6"><div class="card"><div class="card-body"><small class="text-muted">Pending</small><h3 id="stat-pending">0</h3></div></div></div>
+                    <div class="col-md-3 col-6"><div class="card"><div class="card-body"><small class="text-muted">Error</small><h3 id="stat-error">0</h3></div></div></div>
+                </div>
+
+                <div class="card border-top-0 mb-3">
+                    <div class="card-body">
+                        <h5>Runs by Report</h5>
+                        <table id="analytics_by_report" style="width: 100%;" class="table table-striped">
+                            <thead><tr><th>Report</th><th>Pending</th><th>Ran</th><th>Error</th><th>Total</th></tr></thead>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card border-top-0 mb-3">
+                    <div class="card-body">
+                        <h5>Runs by User</h5>
+                        <table id="analytics_by_user" style="width: 100%;" class="table table-striped">
+                            <thead><tr><th>User</th><th>Email</th><th>Total</th></tr></thead>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card border-top-0">
+                    <div class="card-body">
+                        <h5>Scheduled Reports</h5>
+                        <div class="form-inline mb-2">
+                            <label class="mr-2" for="analytics_status">Status</label>
+                            <select id="analytics_status" class="form-control form-control-sm">
+                                <option value="pending" selected>Pending</option>
+                                <option value="ran">Ran</option>
+                                <option value="error">Error</option>
+                                <option value="">All</option>
+                            </select>
+                        </div>
+                        <table id="analytics_scheduled" style="width: 100%;" class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th></th>
+                                    <th data-name="created_on">Requested</th>
+                                    <th data-name="report__title">Report</th>
+                                    <th data-name="created_by__last_name">Requested By</th>
+                                    <th data-name="status">Status</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+                </div>
+            </div><!-- end pane-analytics -->
+
+            <script>
+            jQuery(function ($) {
+                var summaryUrl = '{% url "report:run_summary" %}';
+                var bulkUrl = '{% url "report:bulk_actions" %}';
+                var byReport, byUser, scheduled;
+
+                function paint(data) {
+                    $('#stat-total').text(data.totals.total);
+                    $('#stat-ran').text(data.totals.ran);
+                    $('#stat-pending').text(data.totals.pending);
+                    $('#stat-error').text(data.totals.error);
+                    byReport.clear().rows.add(data.by_report).draw();
+                    byUser.clear().rows.add(data.by_user).draw();
+                }
+
+                function loadSummary(window_) {
+                    $.getJSON(summaryUrl, {window: window_}, paint);
+                }
+
+                byReport = $('#analytics_by_report').DataTable({
+                    data: [], paging: false, searching: false, info: false,
+                    order: [[4, 'desc']],
+                    columns: [
+                        {data: 'title'}, {data: 'pending'}, {data: 'ran'},
+                        {data: 'error'}, {data: 'total'}
+                    ]
+                });
+
+                byUser = $('#analytics_by_user').DataTable({
+                    data: [], paging: false, searching: false, info: false,
+                    order: [[2, 'desc']],
+                    columns: [
+                        {data: 'name'}, {data: 'email'}, {data: 'total'}
+                    ]
+                });
+
+                scheduled = $('#analytics_scheduled').DataTable({
+                    serverSide: true,
+                    processing: true,
+                    dom: 'lBfrtip',
+                    rowId: 'id',
+                    select: {style: 'multi', selector: 'td:first-child'},
+                    buttons: [
+                        {
+                            text: '<i class="fas fa-play"></i>&nbsp;Run Selected',
+                            className: 'btn btn-sm btn-success text-white',
+                            action: function (e, dt) {
+                                window.ActionRegistry.doBulkAction(bulkUrl, 'bulk_run_reports', dt);
+                            }
+                        },
+                        {
+                            text: '<i class="fas fa-trash"></i>&nbsp;Delete Selected',
+                            className: 'btn btn-sm btn-danger text-white',
+                            action: function (e, dt) {
+                                window.ActionRegistry.doBulkAction(bulkUrl, 'bulk_delete_reports', dt);
+                            }
+                        }
+                    ],
+                    ajax: {
+                        url: '/ce/reports/api/all_report_scheduler/',
+                        data: function (d) { d.status = $('#analytics_status').val(); }
+                    },
+                    order: [[1, 'desc']],
+                    columns: [
+                        {data: null, defaultContent: '', orderable: false, className: 'select-checkbox'},
+                        {data: 'created_on', name: 'created_on'},
+                        {data: 'report_title', name: 'report__title'},
+                        {data: 'requested_by_name', name: 'created_by__last_name'},
+                        {data: 'status', name: 'status'}
+                    ]
+                });
+
+                window.refreshTable = function (args) {
+                    if (args && args.message) {
+                        swal({title: args.title || 'Done', text: args.message, icon: args.status || 'success'});
+                    }
+                    scheduled.rows().deselect();
+                    scheduled.ajax.reload(null, false);
+                };
+
+                $('#analytics_status').on('change', function () {
+                    scheduled.ajax.reload();
+                });
+
+                $('#pane-analytics .btn-group button').on('click', function () {
+                    $('#pane-analytics .btn-group button')
+                        .removeClass('btn-primary').addClass('btn-outline-primary');
+                    $(this).removeClass('btn-outline-primary').addClass('btn-primary');
+                    loadSummary($(this).data('window'));
+                });
+
+                $(document).on('shown.bs.tab', '#tab-analytics', function () {
+                    loadSummary($('#pane-analytics .btn-group .btn-primary').data('window'));
+                    scheduled.columns.adjust().draw(false);
+                });
+            });
+            </script>
+            {% endif %}
 
             </div><!-- end tab-content -->
         </div>
