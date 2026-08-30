@@ -362,7 +362,17 @@ def update_report(request):
     })
 
 
+@login_required(login_url='/')
+@user_passes_test(_is_superuser, login_url='/')
 def run_report(request, report_scheduler_id):
+    """Run one scheduled report now, synchronously.
+
+    Superuser-only, and deliberately not scoped to the row's owner — a
+    superuser may run any scheduled report, whoever requested it. Its only
+    caller is the run_report_link column on the ReportScheduler admin
+    changelist. Without this gate LoginRequiredMiddleware let any
+    authenticated user trigger anyone else's queued report.
+    """
     scheduled_report = ReportScheduler.objects.get(
         pk=report_scheduler_id
     )

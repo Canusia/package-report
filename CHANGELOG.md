@@ -23,9 +23,16 @@ silently keep the old code.
   scope in `views/report.py`, its return value discarded. It decorated nothing and
   protected nothing, while reading as though the module were guarded; removed.
 
-  **`run_report/<uuid>` still has no role check** and can be triggered by any
-  authenticated user. It acts on one named scheduler row and emails that row's
-  requester, so the exposure is narrower, but it is not yet fixed.
+- **`run_report/<uuid>` is superuser-only.** Same gap: any authenticated user could
+  trigger any queued report to execute synchronously, which also emails that row's
+  requester. Its only caller is the `run_report_link` column on the `ReportScheduler`
+  admin changelist. The gate is deliberately *not* scoped to the row's owner — a
+  superuser may run any scheduled report, whoever requested it.
+
+### Known issues
+- `run_report` fetches with `ReportScheduler.objects.get(pk=...)`, so a syntactically
+  valid but unknown UUID raises `DoesNotExist` and returns a 500 rather than a 404.
+  Superuser-only now, so it is a robustness wart rather than an exposure.
 
 ## v2026.2.0 — 2026-08-30
 
