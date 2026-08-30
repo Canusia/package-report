@@ -8,6 +8,25 @@ Releases are git-tag-driven on `Canusia/package-report`; each tenant pins a tag 
 off the version string, not the tag, so a frozen version makes an incremental install
 silently keep the old code.
 
+## v2026.2.1 — 2026-08-30
+
+### Security
+- **`run_command` is superuser-only.** `/ce/reports/run_command/<slug:command>`
+  executes a Django management command by name and shipped with no role check at all.
+  `cis.middleware.LoginRequiredMiddleware` enforces login but not any role, so every
+  authenticated user — verified against a user in the `student` group — could execute
+  any no-argument management command in the deployment, including the SIS importers and
+  the cron-job commands. The view is not referenced by any template or JS. It now
+  requires `is_superuser`.
+
+  A bare `user_passes_test(user_has_cis_role, login_url='/')` statement sat at module
+  scope in `views/report.py`, its return value discarded. It decorated nothing and
+  protected nothing, while reading as though the module were guarded; removed.
+
+  **`run_report/<uuid>` still has no role check** and can be triggered by any
+  authenticated user. It acts on one named scheduler row and emails that row's
+  requester, so the exposure is narrower, but it is not yet fixed.
+
 ## v2026.2.0 — 2026-08-30
 
 Superuser reporting analytics, bulk operations on queued runs, and a substantially richer

@@ -50,8 +50,6 @@ from cis.menu import cis_menu, draw_menu, HS_ADMIN_MENU
 
 logger = logging.getLogger(__name__)
 
-user_passes_test(user_has_cis_role, login_url='/')
-
 def extract_bucket_key(s3_url):
     parsed = urlparse(s3_url)
     bucket = parsed.netloc.split('.')[0]
@@ -71,10 +69,21 @@ class ReportSchedulerViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(report__id=report_id)
         return qs.select_related('report')
 
-def run_command(request, command):
+def _is_superuser(user):
+    return bool(user and user.is_authenticated and user.is_superuser)
 
+
+@login_required(login_url='/')
+@user_passes_test(_is_superuser, login_url='/')
+def run_command(request, command):
+    """Run a Django management command by name.
+
+    Superuser-only. LoginRequiredMiddleware enforces login but no role, so
+    without this gate every authenticated user — a student included — could
+    execute any no-argument management command in the deployment.
+    """
     from django.core.management import call_command
-    
+
     try:
         call_command(command)
 
