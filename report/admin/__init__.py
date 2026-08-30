@@ -7,6 +7,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.db.models import Count
 
 from ..models.report import Report, ReportScheduler
+from ..tasks import process_report
 
 class ReportAdmin(admin.ModelAdmin):
     model = Report
@@ -71,15 +72,39 @@ class ReportAdmin(admin.ModelAdmin):
 
 class ReportSchedulerAdmin(admin.ModelAdmin):
     model = ReportScheduler
+
     list_display = [
-        'created_on',
-        'created_by',
-        'report',
-        'status',
-        'data',
-        'run_report_link',
-        'download_link',
+        'created_on', 'created_by', 'report', 'status',
+        'data_summary', 'run_report_link', 'download_link',
     ]
-    
+    list_filter = ['status', 'report']
+    search_fields = [
+        'created_by__email', 'created_by__first_name',
+        'created_by__last_name', 'report__title',
+    ]
+    date_hierarchy = 'created_on'
+    # A created_by dropdown is unusable at tenant scale.
+    raw_id_fields = ['created_by', 'report']
+    actions = ['run_selected_pending_reports']
+
+    @admin.display(description='Data')
+    def data_summary(self, obj):
+        text = str(obj.data or '')
+        return text if len(text) <= 120 else text[:117] + '...'
+
+    @admin.action(description='Run selected pending reports')
+    def run_selected_pending_reports(self, request, queryset):
+        pending = list(
+            queryset.filter(status='pending').values_list('id', flat=True))
+        for pk in pending:
+            process_report.enqueue(str(pk))
+        skipped = queryset.count() - len(pending)
+        self.message_user(
+            request,
+            f'Queued {len(pending)} report(s); '
+            f'skipped {skipped} that were not pending.',
+        )
+
+
 admin.site.register(ReportScheduler, ReportSchedulerAdmin)
 admin.site.register(Report, ReportAdmin)
