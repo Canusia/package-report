@@ -47,3 +47,15 @@ class AddReportForm(forms.ModelForm):
         cleaned_data = super().clean()
 
         return cleaned_data
+
+
+class BulkDeleteSchedulerForm(forms.Form):
+    """Phase-2 confirmation for deleting queued report runs.
+
+    Only pending runs are deletable: 'ran' rows own S3 artifacts and an audit
+    trail, and a bulk button should not be able to drop them.
+    """
+    confirm = forms.BooleanField(
+        label='Yes, delete the selected pending report runs',
+        required=True,
+    )

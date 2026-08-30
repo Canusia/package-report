@@ -478,3 +478,10 @@ class AllReportSchedulerViewSet(viewsets.ReadOnlyModelViewSet):
         if status in STATUSES:
             qs = qs.filter(status=status)
         return qs.order_by('-created_on')
+
+
+@login_required(login_url='/')
+def report_bulk_actions(request):
+    """Dispatch point for superuser bulk actions on queued report runs."""
+    from ..actions import report_actions
+    return report_actions.dispatch(request, request.POST.get('action'))

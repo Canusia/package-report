@@ -16,7 +16,8 @@ from ..views.report import (
     ReportRunSummaryView,
     AllReportSchedulerViewSet,
     run_command,
-    download
+    download,
+    report_bulk_actions
 )
 
 app_name = 'report'
@@ -50,4 +51,5 @@ urlpatterns = [
     path('update_report/', update_report, name='update_report'),
     path('status_check/', report_status_check, name='report_status_check'),
     path('add_new', add_new_report, name='add_new'),
+    path('bulk_actions', report_bulk_actions, name='bulk_actions'),
 ]
