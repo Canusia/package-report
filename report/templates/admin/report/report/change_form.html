@@ -1,0 +1,31 @@
+{% extends "admin/change_form.html" %}
+
+{% block after_field_sets %}
+<div class="module aligned" style="margin-top: 1em;">
+    <h2>Run History</h2>
+    {% if run_counts %}
+    <table style="width: 100%;">
+        <thead>
+            <tr>
+                <th>User</th><th>Email</th>
+                <th>Pending</th><th>Ran</th><th>Error</th><th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in run_counts %}
+            <tr>
+                <td>{{ row.name }}</td>
+                <td>{{ row.email }}</td>
+                <td>{{ row.pending }}</td>
+                <td>{{ row.ran }}</td>
+                <td>{{ row.error }}</td>
+                <td><strong>{{ row.total }}</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>This report has never been run.</p>
+    {% endif %}
+</div>
+{% endblock %}
