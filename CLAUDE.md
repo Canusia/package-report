@@ -31,7 +31,13 @@ Available at `/ce/reports/`, `/faculty/reports/`, `/highschool_admin/reports/`:
 - `schedule_report/` - POST: Schedule execution
 - `run_report/<uuid>` - Execute pending report
 - `download/<uuid>` - Download completed report
-- `api/report_scheduler/` - REST endpoint
+- `api/report_scheduler/` - REST endpoint, scoped to `request.user`
+
+CE-only (`report.urls.ce`), superuser-only, backing the Report Analytics tab:
+- `api/run_summary/` - GET, aggregate run counts (`?window=1m|3m`)
+- `api/all_report_scheduler/` - GET, every user's runs (not scoped to `request.user`)
+- `bulk_actions` - POST, dispatches `bulk_run_reports` / `bulk_delete_reports` via the
+  `ActionRegistry` in `report/actions.py`; both act on `status='pending'` runs only
 
 ## Commands
 
@@ -57,6 +63,15 @@ REPORTS = [
 ```
 
 Report class location: `{app}.reports.{name}.{name}` with a `run(scheduler, data)` method.
+
+`register_reports` only ever **creates** `Report` rows — it never updates an existing
+one. Once a `Report` row exists for `(app, name)`, re-running the command (e.g. after
+editing an app's `REPORTS` list) does not push title/description/categories/
+`available_for` changes into the database. Superusers can edit those same four fields
+per-report from the Description tab (`update_report/`) or the admin change page; those
+edits are durable and intentionally diverge from the app's declared `AppConfig.REPORTS`
+— treat the database row, not the `REPORTS` list, as the source of truth once a report
+has been registered.
 
 ## Report Execution Flow
 

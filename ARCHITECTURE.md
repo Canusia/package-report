@@ -142,7 +142,50 @@ Superusers can edit report title and description directly from the UI:
 3. Save → AJAX POST to `update_report/` → updates Report model
 4. UI updates the title in the header and sidebar without page reload
 
-### 5. My Reports Workflow
+### 5. Report Analytics Workflow (superuser-only)
+
+A "Report Analytics" tab on `/ce/reports/` is rendered only when
+`request.user.is_superuser`. It combines two read endpoints and one write endpoint,
+all gated by the same `SuperuserOnly` permission class:
+
+```mermaid
+flowchart TD
+    A[Superuser opens Report Analytics tab] --> B[GET api/run_summary/?window=1m|3m]
+    B --> C[Stat tiles + runs-by-report / runs-by-user tables]
+    A --> D[GET api/all_report_scheduler/]
+    D --> E[Scheduled Reports DataTable, every user's runs]
+    E --> F{Bulk action}
+    F -->|Run Selected| G[POST bulk_actions action=bulk_run_reports]
+    F -->|Delete Selected| H[POST bulk_actions action=bulk_delete_reports]
+    G --> I[filter status=pending, enqueue process_report per id]
+    H --> J[filter status=pending, delete]
+    I --> K[refreshTable]
+    J --> K[refreshTable]
+```
+
+- **`api/run_summary/`** (`ReportRunSummaryView`) — aggregates `ReportScheduler` rows
+  created within the window (`1m` or `3m`) into overall totals, per-report totals, and
+  per-user totals, each split by `pending`/`ran`/`error`.
+- **`api/all_report_scheduler/`** (`AllReportSchedulerViewSet`) — a `ReadOnlyModelViewSet`
+  over every user's runs, unlike `ReportSchedulerViewSet` which stays scoped to
+  `request.user`; that scoping is the authorization boundary for CE staff and must not
+  be widened. Only the new, superuser-gated viewset sees other users' runs.
+- **`bulk_actions`** (`report_bulk_actions` → `report.actions.report_actions`, an
+  `ActionRegistry`, following the `support_ticket` pattern) — dispatches
+  `bulk_run_reports` (ajax: enqueues `process_report` for each selected id) and
+  `bulk_delete_reports` (two-phase form: confirm, then delete).
+
+**Both bulk actions filter to `status='pending'` and silently skip anything else.**
+A `ran` row owns an S3 artifact (via `PrivateMediaStorage`) and is part of the
+requester's audit trail of completed runs; neither bulk action deletes or re-runs it.
+`error` rows are likewise left alone — re-running an errored request goes through the
+normal single-report `run_report/<uuid>` flow, not the bulk path.
+
+The admin site exposes an equivalent single-model action —
+`ReportSchedulerAdmin.run_selected_pending_reports` — with the same `pending`-only
+filter, for operators working from `/admin/` instead of the CE tab.
+
+### 6. My Reports Workflow
 
 The **My Reports** tab provides a consolidated view of all report runs for the current user across all report types:
 
@@ -193,7 +236,10 @@ Fallback: `python manage.py run_reports` batch-executes all pending reports (for
 | `run_report()` | GET | Manually execute a pending report |
 | `download()` | GET | Presigned S3 URL for completed report |
 | `run_command()` | GET | Execute management command (CE admin only) |
-| `ReportSchedulerViewSet` | REST API | Report history for DataTables (filterable by report_id) |
+| `ReportSchedulerViewSet` | REST API | Report history for DataTables, scoped to `request.user` |
+| `ReportRunSummaryView` | REST API, GET | Superuser-only aggregate run counts (`?window=1m\|3m`) |
+| `AllReportSchedulerViewSet` | REST API | Superuser-only, every user's runs (no `request.user` scoping) |
+| `report_bulk_actions()` | POST | Superuser-only dispatch into `report.actions.report_actions` |
 
 ## URL Routing
 
@@ -201,15 +247,16 @@ Three URL configs provide role-based access:
 
 | Portal | Path | URL Config | Notes |
 |--------|------|-----------|-------|
-| CE (admin) | `/ce/reports/` | `report.urls.ce` | Full access including `run_command`, `update_report`, and REST API |
+| CE (admin) | `/ce/reports/` | `report.urls.ce` | Full access including `run_command`, `update_report`, REST API, and the superuser-only analytics/bulk endpoints |
 | Faculty | `/faculty/reports/` | `report.urls.faculty` | Standard access |
 | HS Admin | `/highschool_admin/reports/` | `report.urls.highschool_admin` | Standard access |
 
 ## Templates
 
-- **`index.html`** — Main UI with page-level tabs (Reports / My Reports), category sidebar, report list, form area, smart polling, and DataTables
-- **`report.html`** — Report detail view with form, Description tab (editable for superusers), and Recent Runs tab
+- **`index.html`** — Main UI with page-level tabs (Reports / My Reports / Report Analytics for superusers), category sidebar, report list, form area, smart polling, and DataTables
+- **`report.html`** — Report detail view with form, Description tab (editable title/description/categories/available_for for superusers), and Recent Runs tab
 - **`base.html`** — Minimal bootstrap layout for standalone rendering
+- **`admin/report/report/change_form.html`** — Overrides the `Report` admin change page to append an all-time per-user run-count table, split by status, below the field sets
 
 ## File Structure
 
@@ -224,14 +271,19 @@ report/
 │   │   ├── ce.py              # CE admin routes
 │   │   ├── faculty.py         # Faculty routes
 │   │   └── highschool_admin.py
-│   ├── templates/reports/
-│   │   ├── index.html         # Main reports UI (tabs, polling, DataTables)
-│   │   ├── report.html        # Report detail + form + inline edit
-│   │   └── base.html
+│   ├── templates/
+│   │   ├── reports/
+│   │   │   ├── index.html         # Main reports UI (tabs, polling, DataTables)
+│   │   │   ├── report.html        # Report detail + form + inline edit
+│   │   │   └── base.html
+│   │   └── admin/report/report/
+│   │       └── change_form.html   # Report admin: per-user run-count table
 │   ├── management/commands/
 │   │   ├── register_reports.py
 │   │   └── run_reports.py
-│   ├── admin.py
+│   ├── tests/                 # test package, shared factories in factories.py
+│   ├── admin/                 # ReportAdmin / ReportSchedulerAdmin
+│   ├── actions.py             # bulk_run_reports / bulk_delete_reports (ActionRegistry)
 │   ├── apps.py                # ReportConfig / DevReportConfig
 │   ├── forms.py               # AddReportForm
 │   └── tasks.py               # process_report async task
