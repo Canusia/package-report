@@ -560,7 +560,13 @@
                     ],
                     ajax: {
                         url: '{% url "report:all_report_scheduler-list" %}',
-                        data: function (d) { d.status = $('#analytics_status').val(); }
+                        data: function (d) {
+                            // Without this the endpoint answers with DRF's plain page
+                            // shape ({count, results}); DataTables reads json.data.length
+                            // and throws. The Recent Runs table above does the same.
+                            d.format = 'datatables';
+                            d.status = $('#analytics_status').val();
+                        }
                     },
                     order: [[1, 'desc']],
                     columns: [
