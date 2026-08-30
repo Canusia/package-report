@@ -1,12 +1,15 @@
 import logging, json
+from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.db.models import Count
 from django.http import JsonResponse
 from django.db.models import Q
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test, login_required
+from django.utils import timezone
 from django.utils.module_loading import import_string
 from django.http import Http404
 from django.utils.safestring import mark_safe
@@ -18,7 +21,10 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.shortcuts import get_object_or_404, redirect, render
 
 from crispy_forms.utils import render_crispy_form
-from rest_framework import viewsets
+from rest_framework import serializers, viewsets
+from rest_framework.permissions import BasePermission
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from django.http import Http404, HttpResponseRedirect, HttpResponse
 
 from cis.models.settings import Setting
@@ -367,3 +373,108 @@ def run_report(request, report_scheduler_id):
             'error': e,
             'status': 'success'
         })
+
+
+class SuperuserOnly(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(user and user.is_authenticated and user.is_superuser)
+
+
+SUMMARY_WINDOWS = {'1m': 30, '3m': 90}
+STATUSES = ('pending', 'ran', 'error')
+
+
+class ReportRunSummaryView(APIView):
+    """Aggregate report-run counts over a fixed window, for superusers."""
+    permission_classes = [SuperuserOnly]
+
+    def get(self, request):
+        window = request.GET.get('window') or '1m'
+        if window not in SUMMARY_WINDOWS:
+            return Response({'detail': 'Invalid window.'}, status=400)
+
+        since = timezone.now() - timedelta(days=SUMMARY_WINDOWS[window])
+        runs = ReportScheduler.objects.filter(created_on__gte=since)
+
+        totals = {'pending': 0, 'ran': 0, 'error': 0, 'total': 0}
+        for row in runs.values('status').annotate(n=Count('id')):
+            if row['status'] in totals:
+                totals[row['status']] = row['n']
+            totals['total'] += row['n']
+
+        by_report = {}
+        report_rows = (
+            runs.values('report__id', 'report__title', 'status')
+                .annotate(n=Count('id'))
+        )
+        for row in report_rows:
+            entry = by_report.setdefault(row['report__id'], {
+                'report_id': str(row['report__id']),
+                'title': row['report__title'] or '',
+                'pending': 0, 'ran': 0, 'error': 0, 'total': 0,
+            })
+            if row['status'] in STATUSES:
+                entry[row['status']] = row['n']
+            entry['total'] += row['n']
+
+        by_user = [
+            {
+                'user_id': str(row['created_by__id']),
+                'name': f"{row['created_by__first_name']} "
+                        f"{row['created_by__last_name']}".strip(),
+                'email': row['created_by__email'],
+                'total': row['n'],
+            }
+            for row in (
+                runs.values('created_by__id', 'created_by__first_name',
+                            'created_by__last_name', 'created_by__email')
+                    .annotate(n=Count('id'))
+                    .order_by('-n')[:25]
+            )
+        ]
+
+        return Response({
+            'window': window,
+            'totals': totals,
+            'by_report': sorted(by_report.values(),
+                                key=lambda r: r['total'], reverse=True),
+            'by_user': by_user,
+        })
+
+
+class AllReportSchedulerSerializer(serializers.ModelSerializer):
+    created_on = serializers.DateTimeField(format='%Y-%m-%d %I:%M %p')
+    report_title = serializers.CharField(source='report.title',
+                                         read_only=True)
+    requested_by = serializers.CharField(source='created_by.email',
+                                         read_only=True)
+    requested_by_name = serializers.SerializerMethodField()
+    download_link = serializers.CharField(read_only=True)
+
+    def get_requested_by_name(self, obj):
+        user = obj.created_by
+        return f'{user.first_name} {user.last_name}'.strip() or user.email
+
+    class Meta:
+        model = ReportScheduler
+        fields = [
+            'id', 'created_on', 'status', 'download_link',
+            'report_title', 'requested_by', 'requested_by_name',
+        ]
+        datatables_always_serialize = ['id', 'status', 'download_link']
+
+
+class AllReportSchedulerViewSet(viewsets.ReadOnlyModelViewSet):
+    """Every user's report runs. Superusers only — the per-user
+    ReportSchedulerViewSet above stays scoped to request.user and must not be
+    widened, since that filter is the authorization boundary for CE staff."""
+    serializer_class = AllReportSchedulerSerializer
+    permission_classes = [SuperuserOnly]
+
+    def get_queryset(self):
+        qs = ReportScheduler.objects.select_related('report', 'created_by')
+        status = self.request.GET.get('status')
+        if status in STATUSES:
+            qs = qs.filter(status=status)
+        return qs.order_by('-created_on')

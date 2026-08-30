@@ -13,6 +13,8 @@ from ..views.report import (
     update_report,
     report_status_check,
     ReportSchedulerViewSet,
+    ReportRunSummaryView,
+    AllReportSchedulerViewSet,
     run_command,
     download
 )
@@ -21,7 +23,8 @@ app_name = 'report'
 
 router = routers.DefaultRouter()
 router_viewsets = {
-    'report_scheduler': ReportSchedulerViewSet
+    'report_scheduler': ReportSchedulerViewSet,
+    'all_report_scheduler': AllReportSchedulerViewSet,
 }
 
 for router_key in router_viewsets.keys():
@@ -34,6 +37,7 @@ for router_key in router_viewsets.keys():
 urlpatterns = [
 
     path('api/', include(router.urls)),
+    path('api/run_summary/', ReportRunSummaryView.as_view(), name='run_summary'),
 
     path('', reports, name='reports'),
     path('reports_in_category/', reports_in_category, name='reports_in_category'),
