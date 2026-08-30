@@ -2,7 +2,7 @@ import logging, json
 from urllib.parse import urlparse
 
 from django.conf import settings
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.db.models import Q
 from django.contrib import messages
@@ -208,6 +208,10 @@ def report_details(request, report_id=None):
                 'is_superuser': request.user.is_superuser,
                 'report_id': str(report.id),
                 'use_as_datasource': use_as_datasource,
+                'all_categories': Report.CATEGORIES,
+                'all_available_for': Report.AVAILABLE_FOR,
+                'selected_categories': list(report.categories),
+                'selected_available_for': list(report.available_for),
             }
         )
         data = {
@@ -289,11 +293,58 @@ def update_report(request):
     if not title:
         return JsonResponse({'status': 'error', 'message': 'Title is required'}, status=400)
 
+    categories = request.POST.getlist('categories')
+    available_for = request.POST.getlist('available_for')
+
+    valid_categories = {value for value, _ in Report.CATEGORIES}
+    valid_roles = {value for value, _ in Report.AVAILABLE_FOR}
+
+    if not categories:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Select at least one category.'}, status=400)
+    if not set(categories).issubset(valid_categories):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Unrecognised category submitted.'}, status=400)
+
+    if not available_for:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Select at least one role.'}, status=400)
+    if not set(available_for).issubset(valid_roles):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Unrecognised role submitted.'}, status=400)
+
     report.title = title
     report.description = description
-    report.save()
+    report.categories = categories
+    report.available_for = available_for
 
-    return JsonResponse({'status': 'success', 'message': 'Report updated successfully'})
+    try:
+        # Savepoint: without it the IntegrityError poisons the surrounding
+        # transaction and the next query (the session write in
+        # SessionMiddleware) raises TransactionManagementError.
+        with transaction.atomic():
+            report.save()
+    except IntegrityError:
+        # Report.Meta.unique_together = ['name', 'categories']
+        return JsonResponse({
+            'status': 'error',
+            'message': (f'A report named {report.name} already exists with '
+                        'those categories.'),
+        }, status=400)
+
+    return JsonResponse({
+        'status': 'success',
+        'message': ('Report updated successfully. Category changes appear in '
+                    'the left-hand list after the next page load.'),
+        'title': report.title,
+        'description': report.description,
+        'categories': list(report.categories),
+        'available_for': list(report.available_for),
+    })
 
 
 def run_report(request, report_scheduler_id):
