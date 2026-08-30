@@ -39,6 +39,7 @@ class UseAsDatasourceFlagTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         return resp.json().get('report', '')
 
+    @override_settings(REPORTS_USE_AS_DATASOURCE_ENABLED=False)
     def test_button_hidden_by_default(self):
         self.assertNotIn('Use as datasource', self._details_html())
 
