@@ -60,7 +60,7 @@ class ReportScheduler(models.Model):
         if self.status == 'ran':
             return 'download/' + str(self.id)
         return '-'
-    
+
     @property
     def report_args(self):
         return self.data
@@ -69,8 +69,31 @@ class ReportScheduler(models.Model):
         return getDomain() + str(reverse_lazy('report:run_report', kwargs={
             'report_scheduler_id': self.id}))
 
+    def _report_namespace(self):
+        """Which portal's URL conf can build a link this requester can open.
+
+        `download_link` is a bare relative path (`download/<id>`) meant to be
+        resolved against whichever `reports/` page it is rendered on, so it
+        only works embedded in that page. An email has no such page to
+        resolve against, so the link there needs an absolute URL, which means
+        picking the right namespace first: 'report' is mounted at
+        `ce/reports/` and 'highschool_admin_report' at
+        `highschool_admin/reports/`. Mirrors
+        Report.get_reports_in_category's precedence (CIS/CE staff can reach
+        anything).
+        """
+        if user_has_cis_role(self.created_by):
+            return 'report'
+        if user_has_highschool_admin_role(self.created_by):
+            return 'highschool_admin_report'
+        return 'report'
+
+    def download_email_link(self):
+        return getDomain() + str(reverse_lazy(f'{self._report_namespace()}:download', kwargs={
+            'report_scheduler_id': self.id}))
+
     def email_requester(self):
-        
+
         email_settings = reports_email.from_db()
 
         email = email_settings.get('email')
@@ -79,7 +102,7 @@ class ReportScheduler(models.Model):
         email_template = Template(email)
         context = Context({
             'first_name': self.created_by.first_name,
-            'report_download_url': self.download_link,
+            'report_download_url': self.download_email_link(),
             'report_title': self.report.title
         })
 
