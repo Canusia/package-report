@@ -196,11 +196,36 @@ def reports_in_category(request):
         reports_available = {}
     return JsonResponse(reports_available)
 
+def _not_available_to(request, report):
+    """The refusal these two AJAX endpoints return, or None if allowed.
+
+    Shaped like their other error responses so the page's error handler
+    renders it rather than throwing.
+    """
+    if report.is_available_to(request.user):
+        return None
+
+    logger.warning(
+        'User %s attempted report %s, which is available_for %s',
+        request.user.pk, report.name, list(report.available_for)
+    )
+    return JsonResponse({
+        'status': 'error',
+        'message': 'This report is not available to you.',
+    }, status=403)
+
+
+@login_required(login_url='/')
 def report_details(request, report_id=None):
     if not report_id:
         report_id = request.GET.get('report_id', None)
 
-    report = get_object_or_404(Report, pk=report_id)    
+    report = get_object_or_404(Report, pk=report_id)
+
+    refusal = _not_available_to(request, report)
+    if refusal:
+        return refusal
+
     report_name = report.name
 
     try:
@@ -258,10 +283,16 @@ def report_details(request, report_id=None):
     return JsonResponse(data)
 
 
+@login_required(login_url='/')
 def schedule_report(request):
     if request.method == 'POST':
-        
+
         report = get_object_or_404(Report, pk=request.POST.get('report_id'))
+
+        refusal = _not_available_to(request, report)
+        if refusal:
+            return refusal
+
         report_name = report.name
 
         try:

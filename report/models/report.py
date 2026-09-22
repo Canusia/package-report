@@ -17,7 +17,10 @@ from multiselectfield import MultiSelectField
 from rest_framework import serializers
 
 from cis.settings.reports_email import reports_email
-from cis.utils import user_has_cis_role, user_has_highschool_admin_role, getDomain
+from cis.utils import (
+    user_has_cis_role, user_has_highschool_admin_role,
+    user_has_instructor_role, getDomain
+)
 from cis.serializers.teacher import CustomUserSerializer
 
 class ReportScheduler(models.Model):
@@ -224,6 +227,29 @@ class Report(models.Model):
 
     def __str__(self):
         return self.name
+
+    # The role each `available_for` choice names, and how to test for it.
+    # Keyed by the AVAILABLE_FOR value so the two cannot drift apart.
+    ROLE_TESTS = {
+        'highschool_admin': user_has_highschool_admin_role,
+        'instructor': user_has_instructor_role,
+    }
+
+    def is_available_to(self, user):
+        """Whether `user` may load and run this report.
+
+        `available_for` already records who a report is published to; it was
+        only ever used to decide what to *list*, never to decide what a
+        caller could actually run. CE/CIS staff keep access to everything,
+        matching get_reports_in_category's precedence below.
+        """
+        if user_has_cis_role(user):
+            return True
+
+        return any(
+            role in self.available_for and test(user)
+            for role, test in self.ROLE_TESTS.items()
+        )
 
     @classmethod
     def get_reports_in_category(cls, category, user):
