@@ -235,21 +235,35 @@ class Report(models.Model):
         'instructor': user_has_instructor_role,
     }
 
+    @classmethod
+    def roles_of(cls, user):
+        """Which AVAILABLE_FOR values `user` holds.
+
+        Evaluated once and passed around rather than re-derived per report:
+        each cis role helper calls `user.get_roles()`, which queries.
+        """
+        roles = {role for role, test in cls.ROLE_TESTS.items() if test(user)}
+        if user_has_cis_role(user):
+            roles.add('ce')
+        return roles
+
+    def available_to_roles(self, roles):
+        """CE/CIS staff reach every report, matching the listing's
+        long-standing precedence, so `available_for` is not consulted for
+        them — a report published only to instructors still shows to CE.
+        """
+        if 'ce' in roles:
+            return True
+        return bool(roles & set(self.available_for))
+
     def is_available_to(self, user):
         """Whether `user` may load and run this report.
 
         `available_for` already records who a report is published to; it was
         only ever used to decide what to *list*, never to decide what a
-        caller could actually run. CE/CIS staff keep access to everything,
-        matching get_reports_in_category's precedence below.
+        caller could actually run.
         """
-        if user_has_cis_role(user):
-            return True
-
-        return any(
-            role in self.available_for and test(user)
-            for role, test in self.ROLE_TESTS.items()
-        )
+        return self.available_to_roles(self.roles_of(user))
 
     @classmethod
     def get_reports_in_category(cls, category, user):
@@ -257,14 +271,14 @@ class Report(models.Model):
             categories__icontains=category
         )
 
-        if user_has_cis_role(user):
-            pass
-        elif user_has_highschool_admin_role(user):
-            reports = reports.filter(
-                available_for__contains='highschool_admin'
-            )
-
-        reports = reports.order_by('title')
+        # No else here meant every other role — student, instructor,
+        # faculty, tech center, applicant — got the unfiltered list with
+        # `available_for` ignored entirely (#2 B5).
+        roles = cls.roles_of(user)
+        reports = [
+            report for report in reports.order_by('title')
+            if report.available_to_roles(roles)
+        ]
 
         result = {
             'reports':[]
