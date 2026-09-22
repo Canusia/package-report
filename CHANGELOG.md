@@ -8,6 +8,91 @@ Releases are git-tag-driven on `Canusia/package-report`; each tenant pins a tag 
 off the version string, not the tag, so a frozen version makes an incremental install
 silently keep the old code.
 
+## v2026.2.2 — 2026-09-22
+
+Addresses `Canusia/package-report#2`, reported against v2026.1.1 while publishing grade
+reports to the HS admin portal. **No model changes, so no migrations.**
+
+The issue's headline blocker (A1, the HS admin URLconf not registering the DRF router, so
+a school admin could submit a report but never reach the download link) was already fixed
+in **v2026.1.2**, and its `run_command` / `run_report` items (B3, B4) in **v2026.2.1**.
+Anyone still on v2026.1.1 gets those by upgrading.
+
+### Security
+- **`available_for` is now an authorization check, not just a listing filter.**
+  `schedule_report` resolved a report from a POSTed `report_id` and enqueued a run of it
+  with no check that the caller is CE, nor that the report was published to any role they
+  hold; `report_details` had the same gap on the form-loading side. `LoginRequiredMiddleware`
+  stops anonymous callers, so this was an authenticated-user privilege escalation —
+  verified in test that a user in the `student` group POSTing a `available_for=['ce']`
+  report received a 200 and a persisted `ReportScheduler`, which for a typical deployment
+  means being emailed a CSV of student names, IDs, emails, high schools, registrations and
+  grades. Both views now answer to `Report.is_available_to()`, and both gain the
+  `@login_required` they read as having.
+
+- **`Report.get_reports_in_category` scoped to every role.** It filtered on `available_for`
+  for HS admins and deliberately skipped the filter for CIS/CE, but had no `else` — so a
+  student, instructor, faculty or tech-center user received every report in the category
+  with `available_for` ignored entirely. `reports_in_category` is only `@login_required`,
+  so that listing was reachable, and the gap above made each listed report runnable.
+
+  CE behaviour is unchanged on purpose: CE staff still see reports not published to them.
+  The `('instructor', 'Instructor')` choice in `AVAILABLE_FOR` had no branch anywhere and
+  did nothing; it now selects reports. Roles are resolved once per call rather than per
+  report, because each `cis` role helper calls `user.get_roles()`, which queries.
+
+### Fixed
+- **The report-ready email's download link never resolved.** `ReportScheduler.download_link`
+  is a bare relative path (`download/<id>`) meant to be resolved against whichever
+  `reports/` page renders it; an email has no such page. `download_email_link` builds an
+  absolute URL against the requester's own portal. It falls back rather than raising when
+  a host mounts only one portal — umn's `myce/urls.py` includes `report.urls.ce` alone, so
+  reversing `highschool_admin_report:download` there raised `NoReverseMatch` out of
+  `email_requester()`, *after* `run()` had already generated and saved the report, losing
+  the notification for a run that had succeeded. `download_link` itself is unchanged: it is
+  still correct for the DataTables row link and the admin changelist. (PR #1, thanks
+  @ndHammer.)
+
+- **`templates/reports/index.html` addresses the portal it is served from.** The template
+  serves the CE, HS admin and faculty portals, but its three AJAX endpoints were hardcoded
+  to the CE namespace, so a school admin on `/highschool_admin/reports/` sent their category
+  lookups, report-form loads and submissions to `/ce/reports/`. That worked only because
+  those CE views carried no role check, and it left the HS admin portal's own routes
+  unexercised — so their absence would have been invisible. The analytics block's `report:`
+  URLs are deliberately left alone: `run_summary`, `bulk_actions` and `all_report_scheduler`
+  are CE-only endpoints.
+
+- **`reports()` no longer 500s for roles with no branch.** `categories` was bound only inside
+  the CIS and HS-admin branches, so the render raised `UnboundLocalError` for instructors,
+  faculty, students, tech-center users and applicants. Hit in practice by a user who had an
+  `HSAdministrator` record but was not in the `highschool_admin` group, so neither branch ran.
+
+- **`register_reports` no longer swallows registration failures.** The save sat in
+  `except Exception: ...`, so a report that failed to register produced no output, no row
+  and exit 0. Failures are now named on stderr and registration continues — one malformed
+  manifest must not cost the other apps their reports.
+
+### Changed
+- **`register_reports` discovers apps through the app registry.** It called `import_string()`
+  on each `INSTALLED_APPS` entry, which only resolves when the entry is the dotted path to
+  the AppConfig class; a plain entry (`'student'`, `'instructor'`, …) raised and a bare
+  `except:` swallowed it, so those apps' reports never registered and nothing said so.
+  Discovery now walks `apps.get_app_configs()` and accepts `REPORTS` on either the AppConfig
+  or the app module, as README and CLAUDE.md both document.
+
+- **`download_email_link` is a property**, matching `download_link` and `report_args`
+  beside it.
+
+### Deliberately not changed
+- **`register_reports` remains insert-only.** The issue asked for an upsert on `name`, so
+  that publishing an existing report to a new role would be a code change rather than a
+  per-tenant data migration. Declined: superusers own `title`, `description`, `categories`
+  and `available_for` through the Description tab and the admin, and those edits are meant
+  to outlive the app's declared `REPORTS`. An upsert would clobber every tenant's
+  customisation on the next deploy run. The documented contract stands — once a report is
+  registered, the database row, not the `REPORTS` list, is the source of truth. There is
+  now a test pinning it.
+
 ## v2026.2.1 — 2026-08-30
 
 ### Security
