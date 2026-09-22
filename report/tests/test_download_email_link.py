@@ -3,12 +3,12 @@
 whichever `reports/` page renders it (see `templates/reports/index.html`). An
 email has no such page, so the link never resolved for the requester at all.
 
-`download_email_link()` builds an absolute URL instead, picking the namespace
+`download_email_link` builds an absolute URL instead, picking the namespace
 ('report' at ce/reports/, or 'highschool_admin_report' at
 highschool_admin/reports/) that matches the requester's portal — a High
 School Administrator's email must not point at the CE-only mount.
 """
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from cis.utils import getDomain
@@ -22,7 +22,7 @@ class DownloadEmailLinkTests(TestCase):
             make_report(), make_user('ce_requester', groups=('ce',)), status='ran')
         expected = getDomain() + reverse(
             'report:download', kwargs={'report_scheduler_id': scheduler.id})
-        self.assertEqual(scheduler.download_email_link(), expected)
+        self.assertEqual(scheduler.download_email_link, expected)
 
     def test_highschool_admin_requester_gets_the_highschool_admin_namespace(self):
         scheduler = make_scheduler(
@@ -32,7 +32,7 @@ class DownloadEmailLinkTests(TestCase):
         )
         expected = getDomain() + reverse(
             'highschool_admin_report:download', kwargs={'report_scheduler_id': scheduler.id})
-        self.assertEqual(scheduler.download_email_link(), expected)
+        self.assertEqual(scheduler.download_email_link, expected)
 
     def test_a_user_in_both_roles_gets_the_ce_namespace(self):
         """Matches Report.get_reports_in_category's own precedence: CIS/CE
@@ -44,10 +44,24 @@ class DownloadEmailLinkTests(TestCase):
         )
         expected = getDomain() + reverse(
             'report:download', kwargs={'report_scheduler_id': scheduler.id})
-        self.assertEqual(scheduler.download_email_link(), expected)
+        self.assertEqual(scheduler.download_email_link, expected)
 
     def test_it_is_not_the_bare_relative_download_link(self):
         scheduler = make_scheduler(
             make_report(), make_user('ce_requester2', groups=('ce',)), status='ran')
-        self.assertNotEqual(scheduler.download_email_link(), scheduler.download_link)
-        self.assertIn(scheduler.download_link, scheduler.download_email_link())
+        self.assertNotEqual(scheduler.download_email_link, scheduler.download_link)
+        self.assertIn(scheduler.download_link, scheduler.download_email_link)
+
+    @override_settings(ROOT_URLCONF=__name__.rsplit('.', 1)[0] + '.urlconf_ce_only')
+    def test_falls_back_to_ce_when_the_host_mounts_no_highschool_admin_portal(self):
+        """umn mounts `report.urls.ce` only. Reversing the missing namespace
+        would raise NoReverseMatch out of email_requester(), after the report
+        body has already run."""
+        scheduler = make_scheduler(
+            make_report(),
+            make_user('hs_admin_on_ce_only_host', groups=('highschool_admin',)),
+            status='ran',
+        )
+        expected = getDomain() + reverse(
+            'report:download', kwargs={'report_scheduler_id': scheduler.id})
+        self.assertEqual(scheduler.download_email_link, expected)
