@@ -213,7 +213,7 @@
 
                         $.blockUI();
                         $.ajax({
-                            url: "{% url 'report:reports_in_category' %}",
+                            url: "{% url portal_namespace|add:':reports_in_category' %}",
                             type: 'GET',
                             data: "category=" + $(this).attr("category"),
                             success: function (result) {
@@ -244,7 +244,7 @@
                         var obj = this;
                         event.preventDefault();
                         $.post({
-                            url: "{% url 'report:schedule_report' %}",
+                            url: "{% url portal_namespace|add:':schedule_report' %}",
                             data: $(obj).serialize() + "&report_id=" + report_id,
                             error: function(xhr, status, errorThrown) {
                                 $.unblockUI();
@@ -308,7 +308,7 @@
                         $.blockUI();
                         report_id = $(this).attr("report_id")
                         $.ajax({
-                            url: "{% url 'report:report_details' %}",
+                            url: "{% url portal_namespace|add:':report_details' %}",
                             type: 'GET',
                             data: "report_id=" + $(this).attr("report_id"),
                             success: function (result) {

@@ -174,7 +174,12 @@ def reports(request):
         template, {
             'categories': categories,
             'intro': intro,
-            'menu': menu
+            'menu': menu,
+            # This template serves every portal; its AJAX endpoints have to
+            # address the one it is being served from rather than always the
+            # CE mount. 'report' at ce/reports/, 'highschool_admin_report' at
+            # highschool_admin/reports/, 'faculty_report' at faculty/reports/.
+            'portal_namespace': request.resolver_match.namespace,
         })
     
 @login_required(login_url='/')
