@@ -43,8 +43,20 @@ class Command(BaseCommand):
     def register(self, reports):
 
         for record in reports:
-            if not Report.objects.filter(name=record['name']).exists():
-                db_record = Report(
+            name = record.get('name', '<unnamed>')
+
+            # Insert-only by design. Once a Report row exists, superusers own
+            # title/description/categories/available_for through the
+            # Description tab and the admin, and those edits are meant to
+            # outlive the app's declared REPORTS manifest — so an existing
+            # row is left exactly as it is. See CLAUDE.md, "Registering
+            # Reports".
+            if Report.objects.filter(name=name).exists():
+                self.stdout.write(f'Report - {name} exists')
+                continue
+
+            try:
+                Report.objects.create(
                     app=record.get('app', 'cis'),
                     name=record['name'],
                     title=record['title'],
@@ -52,14 +64,15 @@ class Command(BaseCommand):
                     categories=record['categories'],
                     available_for=record['available_for']
                 )
-                
-                try:
-                    db_record.save()
-                    print(f'Added {record["name"]}')
-                except Exception as e:
-                    ...
+            except Exception as e:
+                # Was `except Exception: ...`, so a report that failed to
+                # register did so with no output, no row and exit 0. One bad
+                # manifest must still not stop the apps after it, so this
+                # reports and carries on rather than raising.
+                self.stderr.write(
+                    f'Failed to register {name}: {e.__class__.__name__}: {e}')
             else:
-                print(f'Report - {record["name"]} exists')
+                self.stdout.write(f'Added {name}')
 
     def handle(self, *args, **kwargs):
         for app_name, reports in discover_manifests(django_apps.get_app_configs()):
