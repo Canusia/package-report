@@ -1,3 +1,4 @@
+from django.apps import apps as django_apps
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import Group
 from django.conf import settings
@@ -5,7 +6,27 @@ from django.db.utils import IntegrityError
 
 from ...models.report import Report
 
-from django.utils.module_loading import import_string
+
+def discover_manifests(app_configs):
+    """Yield (app label, REPORTS) for every app declaring reports.
+
+    Walks the app registry rather than resolving INSTALLED_APPS strings with
+    `import_string()`: that only works when the entry is the dotted path to
+    the AppConfig class, so a plain entry ('student', 'instructor', ...)
+    raised and was swallowed, and those apps' reports never registered.
+
+    README and CLAUDE.md both document declaring REPORTS "in your app's
+    `apps.py` or `__init__.py`", so both placements are accepted, the
+    AppConfig winning if an app somehow has both.
+    """
+    for config in app_configs:
+        reports = getattr(config, 'REPORTS', None)
+        if not reports:
+            reports = getattr(config.module, 'REPORTS', None)
+        if reports:
+            yield config.name, reports
+
+
 class Command(BaseCommand):
     '''
     Register reports in DB
@@ -41,12 +62,6 @@ class Command(BaseCommand):
                 print(f'Report - {record["name"]} exists')
 
     def handle(self, *args, **kwargs):
-        apps = getattr(settings, 'INSTALLED_APPS')
-        for app in apps:
-            try:
-                app_class = import_string(app)
-                if app_class.REPORTS:
-                    print(f'Found Reports in {app}')
-                    self.register(app_class.REPORTS)
-            except:
-                ...
+        for app_name, reports in discover_manifests(django_apps.get_app_configs()):
+            self.stdout.write(f'Found {len(reports)} report(s) in {app_name}')
+            self.register(reports)
