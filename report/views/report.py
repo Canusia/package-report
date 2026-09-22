@@ -154,6 +154,11 @@ def reports(request):
 
     menu = {}
     intro = ''
+    # Bound up front: a user in neither branch below (instructor, faculty,
+    # student, tech center, applicant, or an HS administrator who has a
+    # record but is not in the `highschool_admin` group) reaches the render
+    # too, and an unbound `categories` made that a 500.
+    categories = []
     if user_has_cis_role(request.user):
         menu = draw_menu(cis_menu, 'reports', 'reports', 'ce')
         categories = Report.CATEGORIES
