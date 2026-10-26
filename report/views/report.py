@@ -1,4 +1,5 @@
 import logging, json
+from cis.campus_context import current_campus_or_none
 from datetime import timedelta
 from urllib.parse import urlparse
 
@@ -306,7 +307,8 @@ def schedule_report(request):
                     created_by=request.user,
                     report=report,
                     data=dict(request.POST),
-                    summary={}
+                    summary={},
+                    campus=current_campus_or_none()
                 )
                 report_scheduler.save()
 

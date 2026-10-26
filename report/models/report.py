@@ -58,6 +58,12 @@ class ReportScheduler(models.Model):
         default='pending'
     )
 
+    # The campus the report was requested on (cis #129): the run and its email
+    # read that campus's settings. Null for single-campus and older rows.
+    campus = models.ForeignKey(
+        'cis.Campus', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+')
+
     @property
     def download_link(self):
         if self.status == 'ran':
@@ -146,6 +152,12 @@ class ReportScheduler(models.Model):
         return True
 
     def run(self):
+        from contextlib import nullcontext
+        from cis.campus_context import campus_context
+        with campus_context(self.campus) if self.campus_id else nullcontext():
+            return self._run()
+
+    def _run(self):
         report_name = self.report.name
         reports_path = self.report.app + '.reports'
         report_class = import_string(
