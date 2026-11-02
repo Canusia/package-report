@@ -8,6 +8,10 @@ Releases are git-tag-driven on `Canusia/package-report`; each tenant pins a tag 
 off the version string, not the tag, so a frozen version makes an incremental install
 silently keep the old code.
 
+## v2026.2.4 — 2026-11-02
+
+- Publishes the Reports sidebar items (CE, HS admin) to the cis menu registry (myce_cis v0.1.43a+). On older cis nothing changes.
+
 ## v2026.2.2 — 2026-09-22
 
 Addresses `Canusia/package-report#2`, reported against v2026.1.1 while publishing grade
